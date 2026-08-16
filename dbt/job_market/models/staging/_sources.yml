@@ -1,0 +1,45 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Raw landing zone populated by the Python ingestion scripts
+      (ingestion/extract_remoteok.py, ingestion/extract_arbeitnow.py) before
+      dbt ever runs. dbt treats this schema as read-only.
+    database: "{{ env_var('WAREHOUSE_DB', 'warehouse') }}"
+    schema: raw
+    tables:
+      - name: remoteok_jobs
+        description: One row per job posting seen from the RemoteOK API, full payload as JSONB.
+        loaded_at_field: last_seen_at
+        freshness:
+          warn_after: {count: 30, period: hour}
+          error_after: {count: 72, period: hour}
+        columns:
+          - name: job_id
+            description: Primary key, prefixed with `remoteok_` to avoid collisions with other sources.
+            tests:
+              - unique
+              - not_null
+          - name: payload
+            description: Full raw JSON payload as returned by the RemoteOK API.
+            tests:
+              - not_null
+
+      - name: arbeitnow_jobs
+        description: One row per job posting seen from the Arbeitnow API, full payload as JSONB.
+        loaded_at_field: last_seen_at
+        freshness:
+          warn_after: {count: 30, period: hour}
+          error_after: {count: 72, period: hour}
+        columns:
+          - name: job_id
+            tests:
+              - unique
+              - not_null
+          - name: payload
+            tests:
+              - not_null
+
+      - name: load_runs
+        description: Append-only log of every ingestion run, written by ingestion/db.py::log_run.

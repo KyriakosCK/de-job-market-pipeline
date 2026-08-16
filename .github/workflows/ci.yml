@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python-tests:
+    name: Lint & unit test ingestion code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: ruff check ingestion tests dashboard
+
+      - name: Run pytest
+        run: pytest -v --cov=ingestion --cov-report=term-missing
+
+  dbt-build-and-test:
+    name: dbt build + test against ephemeral Postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: warehouse
+          POSTGRES_USER: jobmarket
+          POSTGRES_PASSWORD: jobmarket
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U jobmarket"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      WAREHOUSE_HOST: localhost
+      WAREHOUSE_PORT: 5432
+      WAREHOUSE_DB: warehouse
+      WAREHOUSE_USER: jobmarket
+      WAREHOUSE_PASSWORD: jobmarket
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install ingestion + dbt dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install dbt-postgres==1.9.1
+
+      - name: Create raw schema
+        run: psql "postgresql://jobmarket:jobmarket@localhost:5432/warehouse" -f sql/ddl_raw_tables.sql
+        env:
+          PGPASSWORD: jobmarket
+
+      - name: Load fixture data into raw schema
+        run: |
+          python - <<'PYEOF'
+          import json
+          from ingestion import db
+          from ingestion.config import DBConfig
+          from ingestion.transform import (
+              filter_remoteok_jobs, filter_arbeitnow_jobs,
+              remoteok_job_id, arbeitnow_job_id,
+          )
+
+          config = DBConfig.from_env()
+          remoteok_raw = json.load(open("tests/fixtures/remoteok_sample.json"))
+          arbeitnow_raw = json.load(open("tests/fixtures/arbeitnow_sample.json"))["data"]
+
+          remoteok_jobs = filter_remoteok_jobs(remoteok_raw)
+          arbeitnow_jobs = filter_arbeitnow_jobs(arbeitnow_raw)
+
+          with db.get_connection(config) as conn:
+              db.ensure_schema(conn)
+              db.upsert_raw_jobs(conn, "remoteok_jobs", [(remoteok_job_id(j), j) for j in remoteok_jobs])
+              db.upsert_raw_jobs(conn, "arbeitnow_jobs", [(arbeitnow_job_id(j), j) for j in arbeitnow_jobs])
+          PYEOF
+
+      - name: dbt seed
+        working-directory: dbt/job_market
+        run: dbt seed --profiles-dir .
+
+      - name: dbt run
+        working-directory: dbt/job_market
+        run: dbt run --profiles-dir .
+
+      - name: dbt test
+        working-directory: dbt/job_market
+        run: dbt test --profiles-dir .
+
+  airflow-dag-import:
+    name: Validate Airflow DAG imports cleanly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install Airflow (with official constraints) + ingestion deps
+        run: |
+          pip install "apache-airflow==2.10.2" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.10.2/constraints-3.11.txt"
+          pip install requests psycopg2-binary
+
+      - name: Initialize Airflow metadata DB (SQLite, throwaway)
+        env:
+          AIRFLOW_HOME: /tmp/airflow_home
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+        run: airflow db migrate
+
+      - name: Check for DAG import errors
+        env:
+          AIRFLOW_HOME: /tmp/airflow_home
+          AIRFLOW__CORE__DAGS_FOLDER: ${{ github.workspace }}/airflow/dags
+          AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          mkdir -p /opt/airflow
+          ln -sfn "${{ github.workspace }}/ingestion" /opt/airflow/ingestion
+          ln -sfn "${{ github.workspace }}/dbt" /opt/airflow/dbt
+          errors=$(airflow dags list-import-errors)
+          echo "$errors"
+          echo "$errors" | grep -q "No data found"

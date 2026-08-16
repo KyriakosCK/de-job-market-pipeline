@@ -1,0 +1,118 @@
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: airflow/Dockerfile
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${AIRFLOW_USER:-airflow}:${AIRFLOW_PASSWORD:-airflow}@airflow-db:5432/${AIRFLOW_DB:-airflow}"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__FERNET_KEY: "${AIRFLOW__CORE__FERNET_KEY:-}"
+    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth"
+    # Consumed by ingestion/config.py and dbt/job_market/profiles.yml -- the
+    # exact same env vars that ingestion and dbt use when run locally.
+    WAREHOUSE_HOST: "${WAREHOUSE_HOST:-warehouse}"
+    WAREHOUSE_PORT: "${WAREHOUSE_PORT:-5432}"
+    WAREHOUSE_DB: "${WAREHOUSE_DB:-warehouse}"
+    WAREHOUSE_USER: "${WAREHOUSE_USER:-jobmarket}"
+    WAREHOUSE_PASSWORD: "${WAREHOUSE_PASSWORD:-jobmarket}"
+    DBT_PROFILES_DIR: /opt/airflow/dbt/job_market
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags
+    - airflow_logs:/opt/airflow/logs
+    - ./ingestion:/opt/airflow/ingestion
+    - ./dbt:/opt/airflow/dbt
+    - ./sql:/opt/airflow/sql
+  depends_on:
+    airflow-db:
+      condition: service_healthy
+    warehouse:
+      condition: service_healthy
+
+services:
+  # --- Airflow's own metadata database (task state, run history, etc.) ---
+  airflow-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: "${AIRFLOW_DB:-airflow}"
+      POSTGRES_USER: "${AIRFLOW_USER:-airflow}"
+      POSTGRES_PASSWORD: "${AIRFLOW_PASSWORD:-airflow}"
+    volumes:
+      - airflow_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${AIRFLOW_USER:-airflow}"]
+      interval: 5s
+      retries: 10
+
+  # --- Analytics warehouse: raw landing zone + dbt-built star schema ---
+  warehouse:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: "${WAREHOUSE_DB:-warehouse}"
+      POSTGRES_USER: "${WAREHOUSE_USER:-jobmarket}"
+      POSTGRES_PASSWORD: "${WAREHOUSE_PASSWORD:-jobmarket}"
+    ports:
+      - "5433:5432" # host 5433 so it doesn't clash with a local Postgres on 5432
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+      - ./sql/ddl_raw_tables.sql:/docker-entrypoint-initdb.d/01_ddl_raw_tables.sql
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${WAREHOUSE_USER:-jobmarket}"]
+      interval: 5s
+      retries: 10
+
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username "${AIRFLOW_ADMIN_USER:-admin}" \
+          --password "${AIRFLOW_ADMIN_PASSWORD:-admin}" \
+          --firstname Data \
+          --lastname Engineer \
+          --role Admin \
+          --email "${AIRFLOW_ADMIN_EMAIL:-admin@example.com}" || true
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    environment:
+      WAREHOUSE_HOST: warehouse
+      WAREHOUSE_PORT: 5432
+      WAREHOUSE_DB: "${WAREHOUSE_DB:-warehouse}"
+      WAREHOUSE_USER: "${WAREHOUSE_USER:-jobmarket}"
+      WAREHOUSE_PASSWORD: "${WAREHOUSE_PASSWORD:-jobmarket}"
+    ports:
+      - "8501:8501"
+    depends_on:
+      warehouse:
+        condition: service_healthy
+
+volumes:
+  airflow_db_data:
+  warehouse_data:
+  airflow_logs:

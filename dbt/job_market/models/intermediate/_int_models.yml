@@ -1,0 +1,15 @@
+version: 2
+
+models:
+  - name: int_jobs_unioned
+    description: >
+      All relevant postings from every source, unioned onto one common
+      schema. This is the single model every mart is built from.
+    columns:
+      - name: job_id
+        tests:
+          - unique
+          - not_null
+      - name: source
+        tests:
+          - not_null

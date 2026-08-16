@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: stg_remoteok_jobs
+    description: RemoteOK postings, one row per job, typed and standardized.
+    columns:
+      - name: job_id
+        tests:
+          - unique
+          - not_null
+      - name: source
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['remoteok']
+      - name: title
+        tests:
+          - not_null
+
+  - name: stg_arbeitnow_jobs
+    description: Arbeitnow postings, one row per job, typed and standardized.
+    columns:
+      - name: job_id
+        tests:
+          - unique
+          - not_null
+      - name: source
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['arbeitnow']
+      - name: title
+        tests:
+          - not_null

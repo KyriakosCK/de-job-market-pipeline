@@ -1,0 +1,36 @@
+skill_name,category,match_keyword
+Python,language,python
+SQL,language,sql
+Java,language,java
+Scala,language,scala
+Apache Airflow,orchestration,airflow
+Dagster,orchestration,dagster
+Prefect,orchestration,prefect
+dbt,transformation,dbt
+Apache Spark,processing,spark
+Apache Kafka,streaming,kafka
+Snowflake,warehouse,snowflake
+BigQuery,warehouse,bigquery
+Redshift,warehouse,redshift
+Databricks,warehouse,databricks
+AWS,cloud,aws
+GCP,cloud,gcp
+Azure,cloud,azure
+Docker,devops,docker
+Kubernetes,devops,kubernetes
+Terraform,devops,terraform
+PostgreSQL,database,postgres
+MySQL,database,mysql
+MongoDB,database,mongodb
+ETL,concept,etl
+ELT,concept,elt
+Data Warehouse,concept,data warehouse
+Data Lake,concept,data lake
+Machine Learning,ml,machine learning
+Power BI,bi,power bi
+Tableau,bi,tableau
+Looker,bi,looker
+Git,devops,git
+CI/CD,devops,ci/cd
+REST API,concept,api
+NoSQL,database,nosql

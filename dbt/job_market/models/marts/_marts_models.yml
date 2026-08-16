@@ -1,0 +1,104 @@
+version: 2
+
+models:
+  - name: dim_company
+    description: One row per distinct employer seen across all sources.
+    columns:
+      - name: company_id
+        tests:
+          - unique
+          - not_null
+      - name: company_name
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_skill
+    description: Reference dimension of tracked skills/tools, built from the skill_keywords seed.
+    columns:
+      - name: skill_id
+        tests:
+          - unique
+          - not_null
+      - name: skill_name
+        tests:
+          - unique
+          - not_null
+
+  - name: fact_job_postings
+    description: One row per job posting, the grain of the whole mart layer.
+    columns:
+      - name: job_id
+        tests:
+          - unique
+          - not_null
+      - name: company_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_id
+      - name: source
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['remoteok', 'arbeitnow']
+
+  - name: bridge_job_skill
+    description: Many-to-many bridge between fact_job_postings and dim_skill.
+    columns:
+      - name: job_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('fact_job_postings')
+                field: job_id
+      - name: skill_id
+        tests:
+          - relationships:
+              arguments:
+                to: ref('dim_skill')
+                field: skill_id
+
+  - name: mart_skill_demand
+    description: One row per skill with current active-posting counts and share of postings. Feeds the dashboard's top-skills chart.
+    columns:
+      - name: skill_id
+        tests:
+          - unique
+          - not_null
+      - name: postings_count
+        tests:
+          - not_null
+
+  - name: mart_postings_by_location
+    description: Posting and remote-share counts grouped by raw location string.
+    columns:
+      - name: location
+        tests:
+          - unique
+          - not_null
+
+  - name: fct_skill_demand_daily
+    description: Incremental daily snapshot of mart_skill_demand, one partition per Airflow run. Powers trend-over-time charts.
+    columns:
+      - name: snapshot_date
+        tests:
+          - not_null
+      - name: skill_id
+        tests:
+          - not_null
+
+  - name: mart_pipeline_runs
+    description: Operational view over raw.load_runs for pipeline observability.
+    columns:
+      - name: run_id
+        tests:
+          - unique
+          - not_null
+      - name: status
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['success', 'failed']

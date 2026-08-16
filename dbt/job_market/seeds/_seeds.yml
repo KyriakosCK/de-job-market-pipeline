@@ -1,0 +1,18 @@
+version: 2
+
+seeds:
+  - name: skill_keywords
+    description: >
+      Reference taxonomy of data/software engineering skills and the
+      lowercase keyword used to detect each one in a posting's tags or
+      description. Maintained by hand -- extend this list to track new
+      tools without touching any model code.
+    columns:
+      - name: skill_name
+        tests:
+          - unique
+          - not_null
+      - name: match_keyword
+        tests:
+          - unique
+          - not_null

@@ -1,0 +1,55 @@
+{
+  "data": [
+    {
+      "slug": "cnc-dreher-polytalent-gmbh",
+      "company_name": "PolyTALENT GmbH",
+      "title": "CNC-Dreher (m/w/d)",
+      "description": "<p>Wir suchen einen CNC-Dreher fuer unseren Standort...</p>",
+      "remote": false,
+      "url": "https://www.arbeitnow.com/jobs/cnc-dreher-polytalent-gmbh",
+      "tags": ["Fertigung"],
+      "job_types": ["Experienced", "fulltime permanent"],
+      "location": "Niederlangen, Niedersachsen, Deutschland",
+      "created_at": 1786700000
+    },
+    {
+      "slug": "data-platform-engineer-nordic-data-collective",
+      "company_name": "Nordic Data Collective",
+      "title": "Data Platform Engineer",
+      "description": "<p>You'll design and operate our cloud data warehouse, build ELT pipelines with dbt and Airflow, and work closely with analytics engineers on SQL data models...</p>",
+      "remote": true,
+      "url": "https://www.arbeitnow.com/jobs/data-platform-engineer-nordic-data-collective",
+      "tags": ["Data Engineering", "Python", "SQL"],
+      "job_types": ["fulltime"],
+      "location": "Remote, EU",
+      "created_at": 1786756000
+    },
+    {
+      "slug": "junior-analytics-engineer-brightgrid",
+      "company_name": "BrightGrid",
+      "title": "Junior Analytics Engineer",
+      "description": "<p>Entry-level role modeling data with dbt and SQL on top of a Snowflake warehouse, supporting BI dashboards...</p>",
+      "remote": true,
+      "url": "https://www.arbeitnow.com/jobs/junior-analytics-engineer-brightgrid",
+      "tags": ["Analytics", "dbt", "SQL"],
+      "job_types": ["fulltime"],
+      "location": "Remote",
+      "created_at": 1786800000
+    }
+  ],
+  "links": {
+    "first": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "last": "https://www.arbeitnow.com/api/job-board-api?page=1",
+    "prev": null,
+    "next": null
+  },
+  "meta": {
+    "current_page": 1,
+    "from": 1,
+    "last_page": 1,
+    "path": "https://www.arbeitnow.com/api/job-board-api",
+    "per_page": 100,
+    "to": 3,
+    "total": 3
+  }
+}

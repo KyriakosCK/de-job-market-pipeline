@@ -1,0 +1,7 @@
+# Extra Python packages baked into the custom Airflow image
+# (see airflow/Dockerfile). Kept separate from requirements.txt because the
+# Airflow image already ships its own pinned constraint set, and dbt-postgres
+# pulls in a different dependency tree than the lightweight ingestion image.
+dbt-postgres==1.9.1
+requests==2.32.3
+psycopg2-binary==2.9.9

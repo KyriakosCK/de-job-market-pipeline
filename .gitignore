@@ -1,0 +1,29 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# dbt
+dbt/job_market/target/
+dbt/job_market/dbt_packages/
+dbt/job_market/logs/
+dbt/job_market/.user.yml
+# profiles.yml IS committed: it only references env vars (no secrets), and
+# both the Airflow container and CI rely on it being present at that path.
+
+# Airflow
+airflow/logs/
+airflow/plugins/__pycache__/
+airflow/airflow.cfg
+airflow/airflow.db
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local venv
+.venv/
+venv/

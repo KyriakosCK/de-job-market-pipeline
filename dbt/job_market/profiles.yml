@@ -1,0 +1,16 @@
+# Committed on purpose: every value comes from an environment variable, so
+# there are no secrets in this file. The Airflow container points
+# DBT_PROFILES_DIR at this directory; for local dbt CLI usage, either copy
+# this to ~/.dbt/profiles.yml or set DBT_PROFILES_DIR=dbt/job_market.
+job_market:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('WAREHOUSE_HOST', 'localhost') }}"
+      port: "{{ env_var('WAREHOUSE_PORT', '5432') | as_number }}"
+      user: "{{ env_var('WAREHOUSE_USER', 'jobmarket') }}"
+      password: "{{ env_var('WAREHOUSE_PASSWORD', 'jobmarket') }}"
+      dbname: "{{ env_var('WAREHOUSE_DB', 'warehouse') }}"
+      schema: analytics
+      threads: 4
