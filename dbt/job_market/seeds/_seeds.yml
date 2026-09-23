@@ -16,3 +16,19 @@ seeds:
         tests:
           - unique
           - not_null
+
+  - name: location_translations
+    description: >
+      English names for locations that RemoteOK publishes only in the local
+      script (Arabic, Korean, Japanese). source_location must match
+      int_jobs_unioned.source_location exactly (whitespace collapsed,
+      trailing commas stripped). Anything missing from here shows up in the
+      warn-level test assert_locations_translated.
+    columns:
+      - name: source_location
+        tests:
+          - unique
+          - not_null
+      - name: location_en
+        tests:
+          - not_null

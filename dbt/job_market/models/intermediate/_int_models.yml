@@ -13,3 +13,10 @@ models:
       - name: source
         tests:
           - not_null
+      - name: location
+        description: >
+          Display location: English, via the location_translations seed
+          when the source sent it in a non-Latin script. NULL when unknown
+          or untranslatable.
+      - name: source_location
+        description: The location as the source sent it, after whitespace and trailing-comma cleanup.

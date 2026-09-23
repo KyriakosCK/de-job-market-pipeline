@@ -11,12 +11,15 @@ import pytest
 
 from ingestion.transform import (
     arbeitnow_job_id,
+    clean_remoteok_job,
     filter_arbeitnow_jobs,
     filter_remoteok_jobs,
     filter_remotive_jobs,
     is_relevant,
     remoteok_job_id,
     remotive_job_id,
+    repair_mojibake,
+    repair_payload_text,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -138,3 +141,60 @@ class TestRemotive:
         )
         assert is_relevant(marketing["title"], marketing["description"], marketing["tags"])
         assert filter_remotive_jobs([marketing]) == []
+
+
+class TestRepairMojibake:
+    """RemoteOK double-encodes non-ASCII text at the source. The corrupted
+    inputs below are real values from raw.remoteok_jobs."""
+
+    @pytest.mark.parametrize(
+        ("corrupted", "expected"),
+        [
+            ("MacaÃ©, ", "Macaé, "),
+            ("Islamabad, IslÄmÄbÄd, Pakistan", "Islamabad, Islāmābād, Pakistan"),
+            ("Ø¯Ø¨Ù, Ø¯Ø¨Ù", "دبي, دبي"),
+            ("Senior Engineer â Platform", "Senior Engineer — Platform"),
+        ],
+    )
+    def test_repairs_real_remoteok_values(self, corrupted, expected):
+        assert repair_mojibake(corrupted) == expected
+
+    @pytest.mark.parametrize(
+        "clean",
+        ["São Paulo", "Zürich", "Kraków, Poland", "دبي", "東京", "Remote - US", ""],
+    )
+    def test_leaves_clean_text_untouched(self, clean):
+        assert repair_mojibake(clean) == clean
+
+    def test_is_idempotent(self):
+        once = repair_mojibake("MacaÃ©")
+        assert repair_mojibake(once) == once == "Macaé"
+
+    def test_repairs_text_that_mixes_clean_and_corrupted_runs(self):
+        assert repair_mojibake("Zürich or MacaÃ©") == "Zürich or Macaé"
+
+    def test_repairs_double_double_encoding(self):
+        twice = "é".encode().decode("latin-1").encode().decode("latin-1")
+        assert repair_mojibake(twice) == "é"
+
+    def test_walks_nested_payloads(self):
+        payload = {"location": "MacaÃ©", "tags": ["cafÃ©"], "epoch": 1786756900, "remote": None}
+        assert repair_payload_text(payload) == {
+            "location": "Macaé", "tags": ["café"], "epoch": 1786756900, "remote": None,
+        }
+
+
+class TestCleanRemoteOKJob:
+    def test_unescapes_html_in_plain_text_fields(self):
+        job = clean_remoteok_job({"id": "1", "company": "Localiza&amp;Co", "position": "R&amp;D Engineer"})
+        assert job["company"] == "Localiza&Co"
+        assert job["position"] == "R&D Engineer"
+
+    def test_leaves_description_html_alone(self):
+        description = "<p>Tom &amp; Jerry</p>"
+        assert clean_remoteok_job({"id": "1", "description": description})["description"] == description
+
+    def test_does_not_mutate_the_input(self):
+        raw = {"id": "1", "location": "MacaÃ©", "company": "A&amp;B"}
+        clean_remoteok_job(raw)
+        assert raw == {"id": "1", "location": "MacaÃ©", "company": "A&amp;B"}
