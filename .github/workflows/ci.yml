@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
-    branches: [main]
+    branches: [master]
+  workflow_dispatch:
 
 jobs:
   python-tests:
@@ -75,34 +76,31 @@ jobs:
           from ingestion import db
           from ingestion.config import DBConfig
           from ingestion.transform import (
-              filter_remoteok_jobs, filter_arbeitnow_jobs,
-              remoteok_job_id, arbeitnow_job_id,
+              clean_remoteok_job, filter_remoteok_jobs, filter_arbeitnow_jobs,
+              filter_remotive_jobs, remoteok_job_id, arbeitnow_job_id, remotive_job_id,
           )
 
           config = DBConfig.from_env()
           remoteok_raw = json.load(open("tests/fixtures/remoteok_sample.json"))
           arbeitnow_raw = json.load(open("tests/fixtures/arbeitnow_sample.json"))["data"]
+          remotive_raw = json.load(open("tests/fixtures/remotive_sample.json"))["jobs"]
 
           remoteok_jobs = filter_remoteok_jobs(remoteok_raw)
           arbeitnow_jobs = filter_arbeitnow_jobs(arbeitnow_raw)
+          remotive_jobs = filter_remotive_jobs(remotive_raw)
 
           with db.get_connection(config) as conn:
               db.ensure_schema(conn)
-              db.upsert_raw_jobs(conn, "remoteok_jobs", [(remoteok_job_id(j), j) for j in remoteok_jobs])
+              db.upsert_raw_jobs(conn, "remoteok_jobs", [(remoteok_job_id(j), clean_remoteok_job(j)) for j in remoteok_jobs])
               db.upsert_raw_jobs(conn, "arbeitnow_jobs", [(arbeitnow_job_id(j), j) for j in arbeitnow_jobs])
+              db.upsert_raw_jobs(conn, "remotive_jobs", [(remotive_job_id(j), j) for j in remotive_jobs])
           PYEOF
 
-      - name: dbt seed
+      # `dbt build` runs seeds, models and tests in dependency order, so a
+      # failing test on a staging model stops the marts built on top of it.
+      - name: dbt build
         working-directory: dbt/job_market
-        run: dbt seed --profiles-dir .
-
-      - name: dbt run
-        working-directory: dbt/job_market
-        run: dbt run --profiles-dir .
-
-      - name: dbt test
-        working-directory: dbt/job_market
-        run: dbt test --profiles-dir .
+        run: dbt build --profiles-dir .
 
   airflow-dag-import:
     name: Validate Airflow DAG imports cleanly
