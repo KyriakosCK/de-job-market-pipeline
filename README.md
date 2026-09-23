@@ -38,16 +38,19 @@ flowchart LR
     subgraph Sources
         A1[RemoteOK API]
         A2[Arbeitnow API]
+        A3[Remotive API]
     end
 
     subgraph Ingestion["Python ingestion (ingestion/)"]
         E1[extract_remoteok.py]
         E2[extract_arbeitnow.py]
+        E3[extract_remotive.py]
     end
 
     subgraph Warehouse["Postgres"]
         R1[(raw.remoteok_jobs)]
         R2[(raw.arbeitnow_jobs)]
+        R4[(raw.remotive_jobs)]
         R3[(raw.load_runs)]
         M[(analytics_marts.*)]
     end
@@ -62,6 +65,7 @@ flowchart LR
     subgraph Orchestration["Airflow (@daily)"]
         D1[extract_remoteok]
         D2[extract_arbeitnow]
+        D6[extract_remotive]
         D3[dbt seed]
         D4[dbt run]
         D5[dbt test]
@@ -73,10 +77,12 @@ flowchart LR
 
     A1 --> E1 --> R1
     A2 --> E2 --> R2
-    E1 & E2 --> R3
-    R1 & R2 --> T1 --> T2 --> T3 --> T4 --> M
+    A3 --> E3 --> R4
+    E1 & E2 & E3 --> R3
+    R1 & R2 & R4 --> T1 --> T2 --> T3 --> T4 --> M
     D1 --> D3
     D2 --> D3
+    D6 --> D3
     D3 --> D4 --> D5
     M --> S1
 ```
@@ -89,10 +95,10 @@ them).
 
 | Layer | Tool | Why |
 |---|---|---|
-| Ingestion | Python 3.11, `requests`, `psycopg2` | No framework needed for two REST APIs; keeps the extract layer simple, typed, and unit-testable |
+| Ingestion | Python 3.11, `requests`, `psycopg2` | No framework needed for three REST APIs; keeps the extract layer simple, typed, and unit-testable |
 | Storage | PostgreSQL 16 | Raw JSONB landing zone + analytics schema, one engine, zero extra infra |
 | Transformation | dbt (dbt-postgres) | Version-controlled SQL, built-in testing/docs, incremental models |
-| Orchestration | Apache Airflow 2.10 (LocalExecutor) | Industry-standard scheduler; DAG mirrors a real production pipeline |
+| Orchestration | Apache Airflow 2.10 (LocalExecutor), or Windows Task Scheduler | Airflow DAG in the Docker stack; a plain scheduled `run_pipeline.bat` for a lightweight always-on local run |
 | Serving | Streamlit + Plotly | Fast to build, good enough for a real analytics-facing dashboard |
 | Packaging | Docker Compose | `docker compose up` reproduces the whole stack on any machine |
 | Testing | pytest, dbt tests (schema + singular) | Ingestion logic and data quality are both covered, not just "it ran" |
@@ -105,7 +111,9 @@ de-job-market-pipeline/
 ├── ingestion/              # Python extractors (pure functions + thin I/O layer)
 │   ├── extract_remoteok.py
 │   ├── extract_arbeitnow.py
-│   ├── transform.py        # filtering / id-generation, unit tested
+│   ├── extract_remotive.py
+│   ├── transform.py        # filtering, id-generation, text repair, unit tested
+│   ├── repair_raw_encoding.py  # one-off backfill for already-landed rows
 │   ├── db.py                # Postgres upsert helpers
 │   └── config.py
 ├── sql/ddl_raw_tables.sql  # raw schema DDL (idempotent)
@@ -116,12 +124,13 @@ de-job-market-pipeline/
 ├── dashboard/               # Streamlit app reading only from analytics_marts
 ├── tests/                   # pytest unit tests + API-shaped fixtures
 ├── .github/workflows/ci.yml
+├── run_pipeline.bat         # daily run for Windows Task Scheduler (no Docker)
 └── docker-compose.yml
 ```
 
 ## Data model
 
-Four public job board APIs are combined onto one schema:
+Three public job board APIs are combined onto one schema:
 
 * **RemoteOK** (`remoteok.com/api`) — global remote postings across every
   industry; filtered down to data/software roles by keyword matching on
@@ -223,11 +232,18 @@ cd dbt/job_market && dbt seed && dbt run && dbt test && cd ../..
 streamlit run dashboard/app.py
 ```
 
+### Option C — scheduled daily run on Windows (no Docker)
+
+`run_pipeline.bat` runs the RemoteOK and Remotive extractors followed by
+`dbt build`, writes a dated log to `logs/pipeline_YYYY-MM-DD.log`, and
+exits non-zero if any step fails. Point a Windows Task Scheduler task at it
+to refresh the warehouse daily.
+
 ## Testing
 
 ```bash
 pytest -v --cov=ingestion              # ingestion unit tests, fixtures captured from real API responses
-cd dbt/job_market && dbt test          # 50 schema + singular data-quality tests
+cd dbt/job_market && dbt build         # seeds + models + 62 schema/singular data-quality tests
 ruff check ingestion tests dashboard   # lint
 ```
 
@@ -243,9 +259,22 @@ DAG imports without errors.
   layer's only job is "land it faithfully." Schema drift on the source
   side (a renamed field, a new tag format) breaks a dbt model, which fails
   loudly with a clear error — it never silently breaks ingestion.
-* **Two independent extractors, one shared upsert path.** Adding a third
-  source means writing one new `extract_*.py` and one new `stg_*.sql`
-  model; nothing else changes.
+* **Independent extractors, one shared upsert path.** Adding a source
+  means writing one new `extract_*.py`, one new `stg_*.sql` model and one
+  `union all` branch. Remotive was added exactly this way.
+* **Repairing a broken source at the edge, with a backstop.** RemoteOK's
+  API double-encodes non-ASCII text: Dubai arrives as `Ø¯Ø¨Ù`, Macaé as
+  `MacaÃ©`. Checked against the raw response bytes, so it's the source,
+  not our HTTP client. The fix has three layers:
+  `transform.repair_mojibake` repairs text before it lands (unit tested on
+  real corrupted values, idempotent, leaves genuine `é`/`ü` alone), a
+  one-off backfill fixed the rows already landed, and dbt nulls anything
+  still unrepairable (e.g. a `™` the source truncated mid-character) to
+  "Unspecified". A warn-level dbt test reports how often that fallback
+  fires, so a source changing its encoding shows up in test output.
+  Once decoded, some locations turned out to be in Arabic, Korean or
+  Japanese only; a `location_translations` seed maps them to English, and
+  another warn-level test lists any new ones that need a row.
 * **`is_active` instead of deleting stale rows.** Postings aren't hard
   deleted when a source stops listing them — `fact_job_postings.is_active`
   is derived from `last_seen_at`, so historical analysis (fct_skill_demand_daily)

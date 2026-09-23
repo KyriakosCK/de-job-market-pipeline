@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from ingestion import db
 from ingestion.config import DBConfig
 from ingestion.http_utils import get_json
-from ingestion.transform import filter_remoteok_jobs, remoteok_job_id
+from ingestion.transform import clean_remoteok_job, filter_remoteok_jobs, remoteok_job_id
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -38,7 +38,9 @@ def run(config: DBConfig | None = None) -> int:
             len(raw_jobs), len(relevant_jobs),
         )
 
-        records = [(remoteok_job_id(job), job) for job in relevant_jobs]
+        # RemoteOK double-encodes non-ASCII text and HTML-escapes plain-text
+        # fields; see transform.clean_remoteok_job.
+        records = [(remoteok_job_id(job), clean_remoteok_job(job)) for job in relevant_jobs]
 
         with db.get_connection(config) as conn:
             db.ensure_schema(conn)
