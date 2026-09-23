@@ -1,6 +1,6 @@
 # SkillScope — Data & Software Job Market Pipeline
 
-[![CI](https://github.com/your-username/de-job-market-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/your-username/de-job-market-pipeline/actions/workflows/ci.yml)
+[![CI](https://github.com/KyriakosCK/de-job-market-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/KyriakosCK/de-job-market-pipeline/actions/workflows/ci.yml)
 
 An end-to-end **ELT pipeline** that pulls live tech job postings from public
 APIs, lands them raw in Postgres, models them into an analytics star schema
@@ -121,14 +121,23 @@ de-job-market-pipeline/
 
 ## Data model
 
-Two free, no-auth-required public job board APIs are combined onto one
-schema:
+Four public job board APIs are combined onto one schema:
 
 * **RemoteOK** (`remoteok.com/api`) — global remote postings across every
   industry; filtered down to data/software roles by keyword matching on
   title, tags, and description (`ingestion/transform.py::is_relevant`).
 * **Arbeitnow** (`arbeitnow.com/api/job-board-api`) — EU-focused postings,
   paginated, filtered the same way.
+* **Remotive** (`remotive.com/api/remote-jobs`) — remote-only postings,
+  filtered by Remotive's own category label rather than keyword guessing
+  (`ingestion/transform.py::filter_remotive_jobs`).
+
+I also tried Adzuna and dropped it. Its search API truncates descriptions
+at exactly 500 characters with no ellipsis, so skill tagging against that
+text would silently undercount anything past the cutoff. Its salaries came
+back as `salary_is_predicted` model output rather than posted figures, and
+its results were UK on-site listings in a project that's specifically about
+remote roles — not a fit on any of the three counts.
 
 ```mermaid
 erDiagram
@@ -181,7 +190,7 @@ dbt docs generate && dbt docs serve
 ### Option A — full stack with Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/your-username/de-job-market-pipeline.git
+git clone https://github.com/KyriakosCK/de-job-market-pipeline.git
 cd de-job-market-pipeline
 cp .env.example .env
 docker compose up --build

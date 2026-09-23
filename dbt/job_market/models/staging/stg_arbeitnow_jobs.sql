@@ -25,6 +25,9 @@ parsed as (
         cast(null as numeric)                                 as salary_min,
         cast(null as numeric)                                 as salary_max,
         to_timestamp((payload ->> 'created_at')::bigint)      as posted_at,
+        -- Arbeitnow publishes no usable job category, so relevance for this
+        -- source falls back to title matching in int_jobs_unioned.
+        cast(null as text)                                    as source_category,
         first_seen_at,
         last_seen_at
     from source

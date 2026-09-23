@@ -17,9 +17,12 @@ clean-targets:
 
 vars:
   # Only postings still seen in the last N days count as "active" for the
-  # skill-demand marts. Keeps the dashboard from showing stale postings
-  # from a source that stopped listing a job weeks ago.
-  active_posting_window_days: 3
+  # skill-demand marts. The source APIs only return their ~100 most recent
+  # postings each run, so a job that's still live but has scrolled out of
+  # that window looks "gone" well before it's actually closed. 14 days
+  # gives postings room to keep reappearing across runs without being
+  # marked inactive prematurely.
+  active_posting_window_days: 14
 
 models:
   job_market:

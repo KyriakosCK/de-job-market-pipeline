@@ -5,6 +5,7 @@ entire Airflow run over a single dropped connection.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from typing import Any
 
@@ -18,6 +19,18 @@ from ingestion.config import (
 )
 
 logger = logging.getLogger(__name__)
+
+# A source that passes credentials as query params can have them echoed
+# back by `requests` into exception messages (e.g. "... for url: https://...
+# ?app_key=xxxx"). Redact known-sensitive param values before anything
+# touches the logs.
+_SENSITIVE_PARAM_RE = re.compile(
+    r"(?i)(app_id|app_key|api_key|apikey|token|secret|password)=[^&\s]+"
+)
+
+
+def _redact(text: str) -> str:
+    return _SENSITIVE_PARAM_RE.sub(r"\1=REDACTED", text)
 
 
 def get_json(url: str, params: dict[str, Any] | None = None) -> Any:
@@ -41,10 +54,17 @@ def get_json(url: str, params: dict[str, Any] | None = None) -> Any:
             wait = REQUEST_BACKOFF_SECONDS * attempt
             logger.warning(
                 "Request to %s failed on attempt %d/%d (%s); retrying in %.1fs",
-                url, attempt, REQUEST_MAX_RETRIES, exc, wait,
+                url, attempt, REQUEST_MAX_RETRIES, _redact(str(exc)), wait,
             )
             if attempt < REQUEST_MAX_RETRIES:
                 time.sleep(wait)
 
     assert last_exc is not None
-    raise last_exc
+    # Re-raise with a redacted message (rather than the raw exception) so a
+    # caller's own logging/error-message handling -- e.g. an extractor's
+    # logger.exception() and raw.load_runs.error_message -- can't leak
+    # credentials embedded in the request URL either.
+    try:
+        raise type(last_exc)(_redact(str(last_exc))) from None
+    except TypeError:
+        raise last_exc from None

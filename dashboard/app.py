@@ -54,8 +54,11 @@ def marts_exist() -> bool:
 
 st.title("📊 SkillScope — Data & Software Job Market")
 st.caption(
-    "Live view over postings pulled from RemoteOK and Arbeitnow, modeled with dbt, "
-    "orchestrated by Airflow. Source: github.com/your-username/de-job-market-pipeline"
+    "Live view over remote job postings from RemoteOK and Remotive, "
+    "modelled with dbt on Postgres and refreshed daily. "
+    "Job data courtesy of [Remotive](https://remotive.com) and "
+    "[RemoteOK](https://remoteok.com). "
+    "Source: github.com/KyriakosCK/de-job-market-pipeline"
 )
 
 try:
@@ -68,6 +71,7 @@ try:
         st.stop()
 
     fact = load_table("fact_job_postings")
+    companies = load_table("dim_company")
     skill_demand = load_table("mart_skill_demand")
     by_location = load_table("mart_postings_by_location")
     daily_trend = load_table("fct_skill_demand_daily")
@@ -80,12 +84,13 @@ except Exception as exc:  # noqa: BLE001
 
 active_postings = fact[fact["is_active"]] if "is_active" in fact.columns else fact
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Active postings", int(len(active_postings)))
-col2.metric("Companies hiring", int(active_postings["company_id"].nunique()))
-col3.metric("Skills tracked", int(skill_demand["skill_id"].nunique()))
+col1, col2, col3, col4, col5 = st.columns(5)
+col1.metric("Total postings tracked", int(len(fact)))
+col2.metric("Active postings", int(len(active_postings)))
+col3.metric("Companies hiring", int(active_postings["company_id"].nunique()))
+col4.metric("Skills tracked", int(skill_demand["skill_id"].nunique()))
 last_run = pipeline_runs.iloc[0] if not pipeline_runs.empty else None
-col4.metric(
+col5.metric(
     "Last pipeline run",
     last_run["status"].upper() if last_run is not None else "n/a",
     help="Most recent row in raw.load_runs, surfaced via mart_pipeline_runs.",
@@ -97,17 +102,17 @@ left, right = st.columns([3, 2])
 
 with left:
     st.subheader("Most in-demand skills")
-    top_skills = skill_demand[skill_demand["postings_count"] > 0].head(15)
+    top_skills = skill_demand[skill_demand["all_time_postings_count"] > 0].head(15)
     if top_skills.empty:
         st.info("No skill matches yet -- run the pipeline to populate data.")
     else:
         fig = px.bar(
-            top_skills.sort_values("postings_count"),
-            x="postings_count",
+            top_skills.sort_values("all_time_postings_count"),
+            x="all_time_postings_count",
             y="skill_name",
             color="category",
             orientation="h",
-            labels={"postings_count": "Active postings", "skill_name": "Skill"},
+            labels={"all_time_postings_count": "Postings (all time)", "skill_name": "Skill"},
         )
         fig.update_layout(height=500, legend_title_text="Category")
         st.plotly_chart(fig, use_container_width=True)
@@ -120,6 +125,32 @@ with right:
         hide_index=True,
         use_container_width=True,
     )
+
+st.divider()
+
+st.subheader("Active postings")
+active_listings = active_postings.merge(companies, on="company_id", how="left")[
+    ["title", "company_name", "location", "posting_url"]
+]
+# location/company_name can be NULL (RemoteOK doesn't always publish them);
+# label them the same way mart_postings_by_location already does, rather
+# than let st.dataframe render the literal string "None". posting_url is
+# left blank instead, since a link column showing "Unspecified" would look
+# like a broken link rather than a missing one.
+active_listings = active_listings.fillna(
+    {"company_name": "Unspecified", "location": "Unspecified", "posting_url": ""}
+)
+st.dataframe(
+    active_listings,
+    hide_index=True,
+    use_container_width=True,
+    column_config={
+        "title": "Title",
+        "company_name": "Company",
+        "location": "Location",
+        "posting_url": st.column_config.LinkColumn("Posting URL"),
+    },
+)
 
 st.divider()
 

@@ -1,0 +1,71 @@
+{
+  "job-count": 5,
+  "total-job-count": 5,
+  "jobs": [
+    {
+      "id": 2091097,
+      "url": "https://remotive.com/remote-jobs/software-development/senior-data-engineer-2091097",
+      "title": "Senior Data Engineer",
+      "company_name": "Lemon.io",
+      "category": "Data and Analytics",
+      "tags": ["python", "sql", "airflow", "snowflake", "dbt"],
+      "job_type": "full_time",
+      "publication_date": "2026-08-19T12:12:11",
+      "candidate_required_location": "LATAM, Europe, USA, Canada, APAC",
+      "salary": "",
+      "description": "<p>Are you a talented Senior Data Engineer looking for a remote job?</p>"
+    },
+    {
+      "id": 2091098,
+      "url": "https://remotive.com/remote-jobs/software-development/senior-golang-developer-2091098",
+      "title": "Senior Golang Developer",
+      "company_name": "Lemon.io",
+      "category": "Software Development",
+      "tags": ["golang", "kubernetes", "python"],
+      "job_type": "full_time",
+      "publication_date": "2026-08-20T13:30:47",
+      "candidate_required_location": "Europe, USA, UK",
+      "salary": "",
+      "description": "<p>You'd build the Go-based platform for GPU clusters.</p>"
+    },
+    {
+      "id": 2091068,
+      "url": "https://remotive.com/remote-jobs/marketing/head-of-marketing-communications-2091068",
+      "title": "Head of Marketing & Communications",
+      "company_name": "garden3d",
+      "category": "Marketing",
+      "tags": ["video", "Figma", "project management"],
+      "job_type": "contract",
+      "publication_date": "2026-08-15T19:58:15",
+      "candidate_required_location": "Worldwide",
+      "salary": "$150k - $230k",
+      "description": "<p>Tell the garden3d story across the internet. Data-driven reporting and ROI matter here.</p>"
+    },
+    {
+      "id": 1185979,
+      "url": "https://remotive.com/remote-jobs/writing/freelance-writer-1185979",
+      "title": "Freelance Writer",
+      "company_name": "IAPWE",
+      "category": "Writing",
+      "tags": ["REST"],
+      "job_type": "freelance",
+      "publication_date": "2026-08-04T16:53:05",
+      "candidate_required_location": "Worldwide",
+      "salary": "$50-$75 /hour",
+      "description": "<p>Create articles and blog posts on a variety of topics.</p>"
+    },
+    {
+      "id": 2091045,
+      "url": "https://remotive.com/remote-jobs/devops/site-reliability-engineer-2091045",
+      "title": "Site Reliability Engineer",
+      "company_name": "Unio Digital",
+      "category": "DevOps / Sysadmin",
+      "tags": ["azure", "terraform", "kubernetes"],
+      "job_type": "full_time",
+      "publication_date": "2026-08-07T01:10:06",
+      "candidate_required_location": "Worldwide",
+      "salary": "",
+      "description": "<p>Keep the platform up.</p>"
+    }
+  ]
+}

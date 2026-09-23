@@ -13,8 +13,10 @@ from ingestion.transform import (
     arbeitnow_job_id,
     filter_arbeitnow_jobs,
     filter_remoteok_jobs,
+    filter_remotive_jobs,
     is_relevant,
     remoteok_job_id,
+    remotive_job_id,
 )
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -28,6 +30,11 @@ def remoteok_sample() -> list[dict]:
 @pytest.fixture
 def arbeitnow_sample() -> dict:
     return json.loads((FIXTURES_DIR / "arbeitnow_sample.json").read_text())
+
+
+@pytest.fixture
+def remotive_sample() -> dict:
+    return json.loads((FIXTURES_DIR / "remotive_sample.json").read_text())
 
 
 class TestIsRelevant:
@@ -94,3 +101,40 @@ class TestArbeitnow:
         assert "Data Platform Engineer" in titles
         assert "Junior Analytics Engineer" in titles
         assert len(filtered) == 2
+
+
+class TestRemotive:
+    """Remotive is filtered on the source's own category label rather than
+    keyword-matching free text, so these tests pin that behaviour down."""
+
+    def test_job_id_uses_numeric_id(self):
+        assert remotive_job_id({"id": 2091097}) == "remotive_2091097"
+
+    def test_job_id_raises_without_id(self):
+        with pytest.raises(ValueError):
+            remotive_job_id({"title": "no id here"})
+
+    def test_filter_keeps_tech_categories(self, remotive_sample):
+        filtered = filter_remotive_jobs(remotive_sample["jobs"])
+        titles = {job["title"] for job in filtered}
+        assert "Senior Data Engineer" in titles
+        assert "Senior Golang Developer" in titles
+        assert "Site Reliability Engineer" in titles
+        assert len(filtered) == 3
+
+    def test_filter_drops_non_tech_categories(self, remotive_sample):
+        filtered = filter_remotive_jobs(remotive_sample["jobs"])
+        titles = {job["title"] for job in filtered}
+        assert "Head of Marketing & Communications" not in titles
+        assert "Freelance Writer" not in titles
+
+    def test_category_beats_keyword_matching(self, remotive_sample):
+        """The marketing posting's description mentions "Data-driven
+        reporting and ROI" -- exactly the kind of incidental keyword that
+        fooled the RemoteOK title/description filter. Category-based
+        filtering is immune to it."""
+        marketing = next(
+            j for j in remotive_sample["jobs"] if j["category"] == "Marketing"
+        )
+        assert is_relevant(marketing["title"], marketing["description"], marketing["tags"])
+        assert filter_remotive_jobs([marketing]) == []

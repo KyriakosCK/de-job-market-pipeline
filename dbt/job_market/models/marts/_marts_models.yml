@@ -43,7 +43,7 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: ['remoteok', 'arbeitnow']
+                values: ['remoteok', 'arbeitnow', 'remotive']
 
   - name: bridge_job_skill
     description: Many-to-many bridge between fact_job_postings and dim_skill.
@@ -62,15 +62,24 @@ models:
                 field: skill_id
 
   - name: mart_skill_demand
-    description: One row per skill with current active-posting counts and share of postings. Feeds the dashboard's top-skills chart.
+    description: One row per skill with current active-posting counts and share of postings, alongside all-time counts across every posting ever seen. Feeds the dashboard's top-skills chart.
     columns:
       - name: skill_id
         tests:
           - unique
           - not_null
       - name: postings_count
+        description: Count of distinct active postings mentioning this skill.
         tests:
           - not_null
+      - name: pct_of_active_postings
+        description: Share of active postings mentioning this skill.
+      - name: all_time_postings_count
+        description: Count of distinct postings mentioning this skill, active or not.
+        tests:
+          - not_null
+      - name: pct_of_all_postings
+        description: Share of all postings (active or not) mentioning this skill.
 
   - name: mart_postings_by_location
     description: Posting and remote-share counts grouped by raw location string.

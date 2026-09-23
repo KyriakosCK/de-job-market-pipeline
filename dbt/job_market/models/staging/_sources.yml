@@ -4,8 +4,9 @@ sources:
   - name: raw
     description: >
       Raw landing zone populated by the Python ingestion scripts
-      (ingestion/extract_remoteok.py, ingestion/extract_arbeitnow.py) before
-      dbt ever runs. dbt treats this schema as read-only.
+      (ingestion/extract_remoteok.py, ingestion/extract_arbeitnow.py,
+      ingestion/extract_remotive.py) before dbt ever runs. dbt treats this
+      schema as read-only.
     database: "{{ env_var('WAREHOUSE_DB', 'warehouse') }}"
     schema: raw
     tables:
@@ -34,6 +35,25 @@ sources:
           error_after: {count: 72, period: hour}
         columns:
           - name: job_id
+            tests:
+              - unique
+              - not_null
+          - name: payload
+            tests:
+              - not_null
+
+      - name: remotive_jobs
+        description: >
+          One row per Remotive posting in a tech category, full payload as
+          JSONB. Remotive classifies its own postings, so ingestion filters
+          on that label rather than keyword-matching free text.
+        loaded_at_field: last_seen_at
+        freshness:
+          warn_after: {count: 30, period: hour}
+          error_after: {count: 72, period: hour}
+        columns:
+          - name: job_id
+            description: Primary key, prefixed with `remotive_` to avoid collisions with other sources.
             tests:
               - unique
               - not_null

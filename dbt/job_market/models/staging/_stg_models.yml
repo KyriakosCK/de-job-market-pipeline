@@ -34,3 +34,30 @@ models:
       - name: title
         tests:
           - not_null
+
+  - name: stg_remotive_jobs
+    description: >
+      Remotive postings (tech categories only), one row per job, typed and
+      standardized. Carries source_category through so int_jobs_unioned can
+      use Remotive's own classification instead of title keyword matching.
+    columns:
+      - name: job_id
+        tests:
+          - unique
+          - not_null
+      - name: source
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['remotive']
+      - name: title
+        tests:
+          - not_null
+      - name: source_category
+        description: Remotive's own category label for the posting.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['Software Development', 'Data and Analytics', 'DevOps / Sysadmin']

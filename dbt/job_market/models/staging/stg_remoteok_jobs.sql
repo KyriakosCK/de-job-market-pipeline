@@ -24,6 +24,9 @@ parsed as (
         nullif(payload ->> 'salary_min', '0')::numeric        as salary_min,
         nullif(payload ->> 'salary_max', '0')::numeric        as salary_max,
         to_timestamp((payload ->> 'epoch')::bigint)           as posted_at,
+        -- RemoteOK publishes no usable job category, so relevance for this
+        -- source falls back to title matching in int_jobs_unioned.
+        cast(null as text)                                    as source_category,
         first_seen_at,
         last_seen_at
     from source

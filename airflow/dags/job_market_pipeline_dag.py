@@ -1,15 +1,15 @@
 """
-SkillScope daily pipeline: pull tech job postings from two public APIs,
+SkillScope daily pipeline: pull tech job postings from three public APIs,
 model them with dbt, and leave a fresh star schema for the dashboard to
 read.
 
     extract_remoteok  ─┐
-                        ├─▶ dbt_seed ─▶ dbt_run ─▶ dbt_test
-    extract_arbeitnow ─┘
+    extract_arbeitnow ─┼─▶ dbt_seed ─▶ dbt_run ─▶ dbt_test
+    extract_remotive  ─┘
 
-Both extractors write to Postgres independently and can run in parallel;
-dbt only starts once both have finished, since the staging models read
-from both raw tables.
+All three extractors write to Postgres independently and can run in
+parallel; dbt only starts once they've all finished, since the staging
+models read from every raw table.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ from airflow.operators.python import PythonOperator
 # locally, with no code changes between the two environments.
 sys.path.insert(0, "/opt/airflow")
 
-from ingestion import extract_arbeitnow, extract_remoteok  # noqa: E402
+from ingestion import extract_arbeitnow, extract_remoteok, extract_remotive  # noqa: E402
 
 DBT_PROJECT_DIR = "/opt/airflow/dbt/job_market"
 DBT_PROFILES_DIR = "/opt/airflow/dbt/job_market"
@@ -63,6 +63,16 @@ with DAG(
         doc_md="Fetch postings (paginated) from the Arbeitnow API and upsert into raw.arbeitnow_jobs.",
     )
 
+    extract_remotive_task = PythonOperator(
+        task_id="extract_remotive",
+        python_callable=extract_remotive.run,
+        doc_md=(
+            "Fetch postings from https://remotive.com/api/remote-jobs and upsert the "
+            "tech-category ones into raw.remotive_jobs. Remotive asks for no more than "
+            "~4 calls/day, which this @daily schedule stays well inside."
+        ),
+    )
+
     dbt_seed = BashOperator(
         task_id="dbt_seed",
         bash_command=(
@@ -90,4 +100,8 @@ with DAG(
         doc_md="Run schema + singular tests; fails the DAG run if data quality regresses.",
     )
 
-    [extract_remoteok_task, extract_arbeitnow_task] >> dbt_seed >> dbt_run >> dbt_test
+    [
+        extract_remoteok_task,
+        extract_arbeitnow_task,
+        extract_remotive_task,
+    ] >> dbt_seed >> dbt_run >> dbt_test

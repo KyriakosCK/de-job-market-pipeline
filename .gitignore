@@ -4,6 +4,8 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+logs/
+pipeline.log
 
 # dbt
 dbt/job_market/target/

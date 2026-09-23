@@ -8,7 +8,7 @@ the parts that silently produce wrong data instead of loudly failing.
 """
 from __future__ import annotations
 
-from ingestion.config import RELEVANT_KEYWORDS
+from ingestion.config import RELEVANT_KEYWORDS, REMOTIVE_TECH_CATEGORIES
 
 
 def is_relevant(title: str, description: str, tags: list[str]) -> bool:
@@ -37,6 +37,13 @@ def arbeitnow_job_id(raw_job: dict) -> str:
     return f"arbeitnow_{slug}"
 
 
+def remotive_job_id(raw_job: dict) -> str:
+    job_id = raw_job.get("id")
+    if not job_id:
+        raise ValueError("Remotive job payload missing 'id'")
+    return f"remotive_{job_id}"
+
+
 def filter_remoteok_jobs(raw_jobs: list[dict]) -> list[dict]:
     """RemoteOK's feed starts with a non-job 'legal notice' record and mixes
     in postings from unrelated industries -- filter both out.
@@ -60,3 +67,15 @@ def filter_arbeitnow_jobs(raw_jobs: list[dict]) -> list[dict]:
         ):
             relevant.append(job)
     return relevant
+
+
+def filter_remotive_jobs(raw_jobs: list[dict]) -> list[dict]:
+    """Filter Remotive postings on the source's own category label.
+
+    Deliberately *not* using is_relevant() here. Remotive classifies every
+    posting itself ("Software Development", "Marketing", "Writing", ...), and
+    trusting that structured label beats guessing from free text -- which is
+    what let a Fire Fighter and an Accounts Receivable Clerk through the
+    RemoteOK filter, on the strength of one "data" in their GDPR boilerplate.
+    """
+    return [job for job in raw_jobs if job.get("category") in REMOTIVE_TECH_CATEGORIES]

@@ -50,8 +50,7 @@ REQUEST_MAX_RETRIES = int(_env("REQUEST_MAX_RETRIES", "3"))
 REQUEST_BACKOFF_SECONDS = float(_env("REQUEST_BACKOFF_SECONDS", "2"))
 USER_AGENT = _env(
     "SKILLSCOPE_USER_AGENT",
-    "SkillScope-DataPipeline/1.0 (+https://github.com/your-username/de-job-market-pipeline; "
-    "portfolio project, contact via GitHub)",
+    "SkillScope-DataPipeline/1.0 (+https://github.com/KyriakosCK/de-job-market-pipeline)",
 )
 
 # Only postings whose title/description/tags mention at least one of these
@@ -63,3 +62,13 @@ RELEVANT_KEYWORDS = [
     "kafka", "cloud", "aws", "gcp", "azure", "machine learning", "ml ",
     "backend", "software", "devops", "platform",
 ]
+
+# Remotive labels every posting with its own category, which is a far more
+# reliable relevance signal than keyword-matching free text. These are the
+# categories treated as in-scope for a data/software job market analysis.
+# Kept in sync with the same list in int_jobs_unioned.sql.
+REMOTIVE_TECH_CATEGORIES = {
+    "Software Development",
+    "Data and Analytics",
+    "DevOps / Sysadmin",
+}
