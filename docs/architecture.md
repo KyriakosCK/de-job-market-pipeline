@@ -30,7 +30,8 @@ marts (star schema)
   dim_company, dim_skill ──┐
   fact_job_postings         ├──▶ bridge_job_skill (many-to-many)
   mart_skill_demand ────────┘
-  mart_postings_by_location
+  fact_job_postings ──▶ bridge_job_region ◀── region_keywords (seed)
+  mart_postings_by_region
   fct_skill_demand_daily (incremental, one partition per day)
   mart_pipeline_runs (observability, sourced from raw.load_runs)
 ```
@@ -58,12 +59,14 @@ stack.
 
 | Table | Grain |
 |---|---|
-| `raw.remoteok_jobs` / `raw.arbeitnow_jobs` | one row per posting ever seen from that source |
-| `int_jobs_unioned` | one row per posting, across both sources |
+| `raw.remoteok_jobs` / `raw.arbeitnow_jobs` / `raw.remotive_jobs` | one row per posting ever seen from that source |
+| `int_jobs_unioned` | one row per posting, across all sources |
 | `dim_company` | one row per distinct company name |
 | `dim_skill` | one row per tracked skill (from the `skill_keywords` seed) |
 | `fact_job_postings` | one row per posting (same grain as `int_jobs_unioned`, enriched with `company_id` + `is_active`) |
 | `bridge_job_skill` | one row per (posting, skill) match |
+| `bridge_job_region` | one row per (posting, hiring region); 'Unspecified' if no region matched |
+| `mart_postings_by_region` | one row per region, active-posting counts |
 | `mart_skill_demand` | one row per skill, current point-in-time counts |
 | `fct_skill_demand_daily` | one row per (day, skill) — this is the only table with history |
 | `mart_pipeline_runs` | one row per ingestion run |

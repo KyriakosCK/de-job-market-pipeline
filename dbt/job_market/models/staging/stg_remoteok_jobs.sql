@@ -14,7 +14,9 @@ parsed as (
         payload ->> 'position'                              as title,
         payload ->> 'company'                                as company_name,
         nullif(trim(payload ->> 'location'), '')             as location,
-        (payload ->> 'location') ilike '%remote%'             as is_remote,
+        -- RemoteOK only lists remote jobs; its location field is where the
+        -- company is based or which region it hires from, not an office.
+        true                                                 as is_remote,
         (
             select array_agg(lower(trim(tag)))
             from jsonb_array_elements_text(coalesce(payload -> 'tags', '[]'::jsonb)) as tag

@@ -10,7 +10,7 @@ raw.arbeitnow_jobs ─┘   stg_arbeitnow_jobs ─┴─▶ int_jobs_unioned ─
                                                                   ─▶ fact_job_postings
                                                                   ─▶ bridge_job_skill ◀─ dim_skill (seed)
                                                                   ─▶ mart_skill_demand ─▶ fct_skill_demand_daily (incremental)
-                                                                  ─▶ mart_postings_by_location
+                                                                  ─▶ bridge_job_region ◀─ region_keywords (seed) ─▶ mart_postings_by_region
 raw.load_runs ──────────────────────────────────────────────────▶ mart_pipeline_runs
 ```
 

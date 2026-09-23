@@ -81,13 +81,40 @@ models:
       - name: pct_of_all_postings
         description: Share of all postings (active or not) mentioning this skill.
 
-  - name: mart_postings_by_location
-    description: Posting and remote-share counts grouped by raw location string.
+  - name: bridge_job_region
+    description: >
+      Many-to-many bridge between fact_job_postings and hiring regions,
+      matched from each posting's location via the region_keywords seed.
+      Every posting has at least one row ('Unspecified' if nothing matched).
     columns:
-      - name: location
+      - name: job_id
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('fact_job_postings')
+                field: job_id
+      - name: region
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['North America', 'Latin America', 'Europe', 'Middle East', 'Africa', 'Asia-Pacific', 'Worldwide', 'Unspecified']
+
+  - name: mart_postings_by_region
+    description: >
+      Active postings per hiring region. A posting open to several regions
+      counts in each, so counts don't sum to the active-posting total.
+    columns:
+      - name: region
         tests:
           - unique
           - not_null
+      - name: postings_count
+        tests:
+          - not_null
+      - name: pct_of_active_postings
+        description: Share of active postings open to candidates in this region.
 
   - name: fct_skill_demand_daily
     description: Incremental daily snapshot of mart_skill_demand, one partition per Airflow run. Powers trend-over-time charts.
