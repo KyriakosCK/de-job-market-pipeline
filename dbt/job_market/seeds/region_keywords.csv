@@ -1,0 +1,62 @@
+match_keyword,region
+usa,North America
+us,North America
+united states,North America
+canada,North America
+northern america,North America
+north america,North America
+california,North America
+new york,North America
+los angeles,North America
+redwood city,North America
+cincinnati,North America
+americas,North America
+americas,Latin America
+latam,Latin America
+latin america,Latin America
+south america,Latin America
+brazil,Latin America
+mexico,Latin America
+argentina,Latin America
+colombia,Latin America
+chile,Latin America
+europe,Europe
+emea,Europe
+emea,Middle East
+emea,Africa
+uk,Europe
+united kingdom,Europe
+germany,Europe
+france,Europe
+spain,Europe
+netherlands,Europe
+ireland,Europe
+poland,Europe
+portugal,Europe
+israel,Middle East
+saudi arabia,Middle East
+united arab emirates,Middle East
+uae,Middle East
+qatar,Middle East
+oman,Middle East
+africa,Africa
+nigeria,Africa
+kenya,Africa
+egypt,Africa
+apac,Asia-Pacific
+asia,Asia-Pacific
+australia,Asia-Pacific
+new zealand,Asia-Pacific
+singapore,Asia-Pacific
+malaysia,Asia-Pacific
+japan,Asia-Pacific
+south korea,Asia-Pacific
+india,Asia-Pacific
+telangana,Asia-Pacific
+hong kong,Asia-Pacific
+philippines,Asia-Pacific
+indonesia,Asia-Pacific
+vietnam,Asia-Pacific
+worldwide,Worldwide
+anywhere,Worldwide
+global,Worldwide

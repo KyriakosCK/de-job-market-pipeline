@@ -24,6 +24,8 @@ MARTS_SCHEMA = "analytics_marts"
 # One blue that holds 3:1+ contrast on both Streamlit's light and dark
 # backgrounds.
 BAR_COLOR = "#3987e5"
+# Muted gray for "Unspecified", which isn't a real category.
+UNSPECIFIED_COLOR = "#8a8a85"
 
 # Display names for the lowercase category codes in seeds/skill_keywords.csv.
 CATEGORY_LABELS = {
@@ -84,7 +86,7 @@ try:
     fact = load_table("fact_job_postings")
     companies = load_table("dim_company")
     skill_demand = load_table("mart_skill_demand")
-    by_location = load_table("mart_postings_by_location")
+    by_region = load_table("mart_postings_by_region")
     daily_trend = load_table("fct_skill_demand_daily")
     pipeline_runs = load_table("mart_pipeline_runs")
 
@@ -146,13 +148,33 @@ with left:
         st.plotly_chart(fig, use_container_width=True)
 
 with right:
-    st.subheader("Postings by location")
-    top_locations = by_location.sort_values("postings_count", ascending=False).head(10)
-    st.dataframe(
-        top_locations[["location", "postings_count", "remote_postings_count"]],
-        hide_index=True,
-        use_container_width=True,
-    )
+    st.subheader("Where you can apply from")
+    if by_region.empty:
+        st.info("No active postings yet -- run the pipeline to populate data.")
+    else:
+        # Unspecified isn't a region, so it's pinned to the bottom in gray
+        # instead of competing in the ranking.
+        regions = by_region.assign(
+            is_unspecified=by_region["region"] == "Unspecified"
+        ).sort_values(["is_unspecified", "postings_count"], ascending=[False, True])
+        fig = px.bar(
+            regions,
+            x="postings_count",
+            y="region",
+            orientation="h",
+            custom_data=["pct_of_active_postings"],
+            labels={"postings_count": "Active postings", "region": ""},
+        )
+        fig.update_traces(
+            marker_color=[UNSPECIFIED_COLOR if u else BAR_COLOR for u in regions["is_unspecified"]],
+            hovertemplate="<b>%{y}</b><br>%{x} postings (%{customdata[0]}% of active)<extra></extra>",
+        )
+        fig.update_layout(height=420, bargap=0.25, margin={"l": 0, "r": 0, "t": 10, "b": 0})
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption(
+            "Remote roles often hire from several regions, so a posting counts "
+            "once in each region it's open to."
+        )
 
 st.divider()
 
@@ -161,7 +183,7 @@ active_listings = active_postings.merge(companies, on="company_id", how="left")[
     ["title", "company_name", "location", "posting_url"]
 ]
 # location/company_name can be NULL (RemoteOK doesn't always publish them);
-# label them the same way mart_postings_by_location already does, rather
+# label them "Unspecified" as the region chart does, rather
 # than let st.dataframe render the literal string "None". posting_url is
 # left blank instead, since a link column showing "Unspecified" would look
 # like a broken link rather than a missing one.
@@ -175,7 +197,9 @@ st.dataframe(
     column_config={
         "title": "Title",
         "company_name": "Company",
-        "location": "Location",
+        "location": st.column_config.TextColumn(
+            "Location", help="Company location, or the regions a remote role hires from"
+        ),
         "posting_url": st.column_config.LinkColumn("Posting URL"),
     },
 )

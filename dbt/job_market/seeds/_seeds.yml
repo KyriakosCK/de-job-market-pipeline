@@ -32,3 +32,17 @@ seeds:
       - name: location_en
         tests:
           - not_null
+
+  - name: region_keywords
+    description: >
+      Maps words found in a posting's location (country, city, or region
+      name like "LATAM") to a broad hiring region. A keyword may map to
+      more than one region ("americas", "emea"). Matched on word
+      boundaries in bridge_job_region.
+    columns:
+      - name: match_keyword
+        tests:
+          - not_null
+      - name: region
+        tests:
+          - not_null
