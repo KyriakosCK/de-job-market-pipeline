@@ -21,6 +21,17 @@ st.set_page_config(page_title="SkillScope | Data Job Market", page_icon="📊", 
 
 MARTS_SCHEMA = "analytics_marts"
 
+# One blue that holds 3:1+ contrast on both Streamlit's light and dark
+# backgrounds.
+BAR_COLOR = "#3987e5"
+
+# Display names for the lowercase category codes in seeds/skill_keywords.csv.
+CATEGORY_LABELS = {
+    "bi": "BI",
+    "ml": "ML",
+    "devops": "DevOps",
+}
+
 
 @st.cache_resource
 def get_engine() -> Engine:
@@ -102,7 +113,20 @@ left, right = st.columns([3, 2])
 
 with left:
     st.subheader("Most in-demand skills")
-    top_skills = skill_demand[skill_demand["all_time_postings_count"] > 0].head(15)
+    matched_skills = skill_demand[skill_demand["all_time_postings_count"] > 0].assign(
+        category_label=lambda df: df["category"].map(CATEGORY_LABELS).fillna(df["category"].str.title())
+    )
+    # The chart ranks skills, so every bar is one color and category is a
+    # filter rather than a hue: sorted by count, any two categories can end
+    # up side by side, and 8+ hues can't stay distinguishable that way.
+    category = st.selectbox(
+        "Category",
+        ["All categories", *sorted(matched_skills["category_label"].unique())],
+        label_visibility="collapsed",
+    )
+    if category != "All categories":
+        matched_skills = matched_skills[matched_skills["category_label"] == category]
+    top_skills = matched_skills.nlargest(15, "all_time_postings_count")
     if top_skills.empty:
         st.info("No skill matches yet -- run the pipeline to populate data.")
     else:
@@ -110,11 +134,15 @@ with left:
             top_skills.sort_values("all_time_postings_count"),
             x="all_time_postings_count",
             y="skill_name",
-            color="category",
             orientation="h",
-            labels={"all_time_postings_count": "Postings (all time)", "skill_name": "Skill"},
+            custom_data=["category_label"],
+            labels={"all_time_postings_count": "Postings (all time)", "skill_name": ""},
         )
-        fig.update_layout(height=500, legend_title_text="Category")
+        fig.update_traces(
+            marker_color=BAR_COLOR,
+            hovertemplate="<b>%{y}</b><br>%{customdata[0]}<br>%{x} postings<extra></extra>",
+        )
+        fig.update_layout(height=500, bargap=0.25, margin={"l": 0, "r": 0, "t": 10, "b": 0})
         st.plotly_chart(fig, use_container_width=True)
 
 with right:
