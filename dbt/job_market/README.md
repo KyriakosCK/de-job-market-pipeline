@@ -4,9 +4,8 @@ Transforms raw job-posting JSON (landed by the Python ingestion scripts in
 `../../ingestion`) into an analytics-ready star schema.
 
 ```
-raw.remoteok_jobs  ─┐
-                     ├─▶ stg_remoteok_jobs  ─┐
-raw.arbeitnow_jobs ─┘   stg_arbeitnow_jobs ─┴─▶ int_jobs_unioned ─▶ dim_company
+raw.remoteok_jobs ─▶ stg_remoteok_jobs ─┐
+raw.remotive_jobs ─▶ stg_remotive_jobs ─┴─▶ int_jobs_unioned ─▶ dim_company
                                                                   ─▶ fact_job_postings
                                                                   ─▶ bridge_job_skill ◀─ dim_skill (seed)
                                                                   ─▶ mart_skill_demand ─▶ fct_skill_demand_daily (incremental)
@@ -17,9 +16,7 @@ raw.load_runs ──────────────────────
 ## Common commands
 
 ```bash
-dbt seed        # load seeds/skill_keywords.csv
-dbt run         # build staging -> intermediate -> marts
-dbt test        # schema + singular tests
+dbt build       # seeds, models and tests in dependency order
 dbt docs generate && dbt docs serve   # browsable lineage graph
 ```
 

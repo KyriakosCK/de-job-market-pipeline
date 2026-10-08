@@ -10,9 +10,7 @@ from pathlib import Path
 import pytest
 
 from ingestion.transform import (
-    arbeitnow_job_id,
     clean_remoteok_job,
-    filter_arbeitnow_jobs,
     filter_remoteok_jobs,
     filter_remotive_jobs,
     is_relevant,
@@ -28,11 +26,6 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures"
 @pytest.fixture
 def remoteok_sample() -> list[dict]:
     return json.loads((FIXTURES_DIR / "remoteok_sample.json").read_text())
-
-
-@pytest.fixture
-def arbeitnow_sample() -> dict:
-    return json.loads((FIXTURES_DIR / "arbeitnow_sample.json").read_text())
 
 
 @pytest.fixture
@@ -82,27 +75,6 @@ class TestRemoteOK:
         titles = {job["position"] for job in filtered}
         assert "Senior Data Engineer" in titles
         assert "Python Backend Engineer" in titles
-        assert len(filtered) == 2
-
-
-class TestArbeitnow:
-    def test_job_id_uses_slug(self):
-        assert arbeitnow_job_id({"slug": "data-engineer-acme"}) == "arbeitnow_data-engineer-acme"
-
-    def test_job_id_raises_without_slug(self):
-        with pytest.raises(ValueError):
-            arbeitnow_job_id({"title": "no slug here"})
-
-    def test_filter_drops_unrelated_jobs(self, arbeitnow_sample):
-        filtered = filter_arbeitnow_jobs(arbeitnow_sample["data"])
-        titles = {job["title"] for job in filtered}
-        assert "CNC-Dreher (m/w/d)" not in titles
-
-    def test_filter_keeps_relevant_jobs(self, arbeitnow_sample):
-        filtered = filter_arbeitnow_jobs(arbeitnow_sample["data"])
-        titles = {job["title"] for job in filtered}
-        assert "Data Platform Engineer" in titles
-        assert "Junior Analytics Engineer" in titles
         assert len(filtered) == 2
 
 

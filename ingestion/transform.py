@@ -85,10 +85,10 @@ def clean_remoteok_job(raw_job: dict) -> dict:
 def is_relevant(title: str, description: str, tags: list[str]) -> bool:
     """Keep only postings that plausibly belong to data/software roles.
 
-    Both source APIs return postings from every job category (a sandblaster
-    role shows up in RemoteOK's feed right next to a data engineer role), so
-    we filter on keywords across title + tags + description rather than
-    trusting either source's own category labels.
+    RemoteOK returns postings from every job category (a sandblaster role
+    shows up in its feed right next to a data engineer role) and has no
+    usable category label, so we filter on keywords across title + tags +
+    description.
     """
     haystack = " ".join([title or "", " ".join(tags or []), description or ""]).lower()
     return any(keyword in haystack for keyword in RELEVANT_KEYWORDS)
@@ -99,13 +99,6 @@ def remoteok_job_id(raw_job: dict) -> str:
     if not job_id:
         raise ValueError("RemoteOK job payload missing both 'id' and 'slug'")
     return f"remoteok_{job_id}"
-
-
-def arbeitnow_job_id(raw_job: dict) -> str:
-    slug = raw_job.get("slug")
-    if not slug:
-        raise ValueError("Arbeitnow job payload missing 'slug'")
-    return f"arbeitnow_{slug}"
 
 
 def remotive_job_id(raw_job: dict) -> str:
@@ -125,16 +118,6 @@ def filter_remoteok_jobs(raw_jobs: list[dict]) -> list[dict]:
             continue  # the legal-notice / metadata record
         if is_relevant(
             job.get("position", ""), job.get("description", ""), job.get("tags", [])
-        ):
-            relevant.append(job)
-    return relevant
-
-
-def filter_arbeitnow_jobs(raw_jobs: list[dict]) -> list[dict]:
-    relevant = []
-    for job in raw_jobs:
-        if is_relevant(
-            job.get("title", ""), job.get("description", ""), job.get("tags", [])
         ):
             relevant.append(job)
     return relevant

@@ -1,5 +1,5 @@
 -- Flatten the raw RemoteOK JSONB payload into typed columns and standardize
--- it onto the common job-posting shape shared with stg_arbeitnow_jobs.
+-- it onto the common job-posting shape shared with stg_remotive_jobs.
 with source as (
 
     select * from {{ source('raw', 'remoteok_jobs') }}

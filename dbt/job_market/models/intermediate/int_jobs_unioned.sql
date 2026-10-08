@@ -1,5 +1,5 @@
 -- Union every source onto one common grain (one row per posting) so every
--- downstream mart is source-agnostic. Adding a fourth source later only
+-- downstream mart is source-agnostic. Adding another source later only
 -- means adding one more `union all` branch here.
 --
 -- NOTE: the staging models are combined with `select *`, so their column
@@ -8,12 +8,6 @@
 with remoteok as (
 
     select * from {{ ref('stg_remoteok_jobs') }}
-
-),
-
-arbeitnow as (
-
-    select * from {{ ref('stg_arbeitnow_jobs') }}
 
 ),
 
@@ -26,8 +20,6 @@ remotive as (
 unioned as (
 
     select * from remoteok
-    union all
-    select * from arbeitnow
     union all
     select * from remotive
 
@@ -89,7 +81,7 @@ where title is not null
   --
   --   * Remotive labels every posting with its own category, so we trust
   --     that structured label directly.
-  --   * RemoteOK and Arbeitnow publish no usable category, so we fall back
+  --   * RemoteOK publishes no usable category, so we fall back
   --     to matching role keywords against the TITLE only. Matching the
   --     description instead is what originally let "Fire Fighter" and
   --     "Accounts Receivable Clerk" through -- almost every posting's

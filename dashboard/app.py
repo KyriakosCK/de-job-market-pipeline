@@ -15,7 +15,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import URL, Engine
 
 st.set_page_config(page_title="SkillScope | Data Job Market", page_icon="📊", layout="wide")
 
@@ -37,13 +37,32 @@ CATEGORY_LABELS = {
 
 @st.cache_resource
 def get_engine() -> Engine:
-    host = os.environ.get("WAREHOUSE_HOST", "localhost")
-    port = os.environ.get("WAREHOUSE_PORT", "5432")
-    db = os.environ.get("WAREHOUSE_DB", "warehouse")
-    user = os.environ.get("WAREHOUSE_USER", "jobmarket")
-    password = os.environ.get("WAREHOUSE_PASSWORD", "jobmarket")
-    url = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{db}"
+    # URL.create escapes each part, so a password containing "@" or "/"
+    # can't corrupt the connection string the way an f-string would.
+    url = URL.create(
+        "postgresql+psycopg2",
+        username=os.environ.get("WAREHOUSE_USER", "jobmarket"),
+        password=os.environ.get("WAREHOUSE_PASSWORD", "jobmarket"),
+        host=os.environ.get("WAREHOUSE_HOST", "localhost"),
+        port=int(os.environ.get("WAREHOUSE_PORT", "5432")),
+        database=os.environ.get("WAREHOUSE_DB", "warehouse"),
+    )
     return create_engine(url, pool_pre_ping=True)
+
+
+def latest_run_status(pipeline_runs: pd.DataFrame) -> tuple[str, str]:
+    """Overall status of the most recent pipeline run, and a per-source breakdown.
+
+    Takes each source's latest run, so one source failing can't be hidden by
+    another succeeding after it. Sources with no run in the day before the
+    newest run are left out, so a source that's no longer scheduled doesn't
+    keep reporting its last failure.
+    """
+    latest = pipeline_runs.sort_values("started_at", ascending=False).drop_duplicates("source")
+    latest = latest[latest["started_at"] >= latest["started_at"].max() - pd.Timedelta(days=1)]
+    overall = "FAILED" if (latest["status"] != "success").any() else "SUCCESS"
+    breakdown = ", ".join(f"{row.source}: {row.status}" for row in latest.itertuples())
+    return overall, breakdown
 
 
 @st.cache_data(ttl=300)
@@ -77,9 +96,9 @@ st.caption(
 try:
     if not marts_exist():
         st.warning(
-            "The `analytics_marts` schema doesn't exist yet. Run the pipeline first:\n\n"
-            "```bash\ndocker compose up airflow-init\n"
-            "# then trigger the `job_market_pipeline` DAG from http://localhost:8080\n```"
+            "The `analytics_marts` schema doesn't exist yet. Run the pipeline first: "
+            "`run_pipeline.bat` locally, or trigger the `job_market_pipeline` DAG "
+            "from http://localhost:8080 when using Docker Compose."
         )
         st.stop()
 
@@ -92,7 +111,10 @@ try:
 
 except Exception as exc:  # noqa: BLE001
     st.error(f"Couldn't reach the warehouse database: {exc}")
-    st.info("Is `docker compose up` running, and has the DAG completed at least once?")
+    st.info(
+        "Is the warehouse Postgres running (check the WAREHOUSE_* environment "
+        "variables), and has the pipeline completed at least once?"
+    )
     st.stop()
 
 active_postings = fact[fact["is_active"]] if "is_active" in fact.columns else fact
@@ -102,12 +124,15 @@ col1.metric("Total postings tracked", int(len(fact)))
 col2.metric("Active postings", int(len(active_postings)))
 col3.metric("Companies hiring", int(active_postings["company_id"].nunique()))
 col4.metric("Skills tracked", int(skill_demand["skill_id"].nunique()))
-last_run = pipeline_runs.iloc[0] if not pipeline_runs.empty else None
-col5.metric(
-    "Last pipeline run",
-    last_run["status"].upper() if last_run is not None else "n/a",
-    help="Most recent row in raw.load_runs, surfaced via mart_pipeline_runs.",
-)
+if pipeline_runs.empty:
+    col5.metric("Last pipeline run", "n/a")
+else:
+    run_status, run_breakdown = latest_run_status(pipeline_runs)
+    col5.metric(
+        "Last pipeline run",
+        run_status,
+        help=f"Latest run of each source in raw.load_runs ({run_breakdown}).",
+    )
 
 st.divider()
 
@@ -213,7 +238,9 @@ if daily_trend.empty or daily_trend["snapshot_date"].nunique() < 2:
         "`fct_skill_demand_daily` appends one row per skill every time the DAG runs."
     )
 else:
-    top_skill_names = skill_demand.sort_values("postings_count", ascending=False).head(8)["skill_name"]
+    # Same ranking as the "Most in-demand skills" chart, so the trend follows
+    # the skills shown at the top there.
+    top_skill_names = skill_demand.nlargest(8, "all_time_postings_count")["skill_name"]
     trend_subset = daily_trend[daily_trend["skill_name"].isin(top_skill_names)]
     fig = px.line(
         trend_subset.sort_values("snapshot_date"),

@@ -8,7 +8,7 @@
 -- source changed its encoding.
 {{ config(severity='warn') }}
 
-{% for model in ['stg_remoteok_jobs', 'stg_arbeitnow_jobs', 'stg_remotive_jobs'] %}
+{% for model in ['stg_remoteok_jobs', 'stg_remotive_jobs'] %}
 select job_id, title, company_name, location
 from {{ ref(model) }}
 where {{ is_mojibake('title') }}

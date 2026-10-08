@@ -3,9 +3,9 @@
 ## Layers
 
 **1. Extract (`ingestion/`).** Two independent, side-effect-free extractors
-fetch JSON from RemoteOK and Arbeitnow, filter out postings unrelated to
+fetch JSON from RemoteOK and Remotive, filter out postings unrelated to
 data/software roles (`ingestion/transform.py`), and upsert the full raw
-payload as JSONB into `raw.remoteok_jobs` / `raw.arbeitnow_jobs`. Every run
+payload as JSONB into `raw.remoteok_jobs` / `raw.remotive_jobs`. Every run
 is logged to `raw.load_runs` — success or failure — so pipeline health is
 queryable with SQL instead of grepping logs.
 
@@ -19,7 +19,7 @@ refreshed rather than being deleted.
 
 ```
 staging (1:1 with raw, typed + cleaned)
-  stg_remoteok_jobs, stg_arbeitnow_jobs
+  stg_remoteok_jobs, stg_remotive_jobs
         │
         ▼
 intermediate (source-agnostic)
@@ -43,10 +43,11 @@ aggregate with a plain `count(distinct job_id) group by skill_id` instead
 of unnesting arrays on every query.
 
 **4. Orchestrate (`airflow/dags/job_market_pipeline_dag.py`).** A single
-`@daily` DAG: both extractors run in parallel, then `dbt seed → dbt run →
-dbt test` runs once both have finished (staging models read from both raw
-tables, so dbt can't start early). `dbt test` runs last and on purpose —
-if data quality regresses, the DAG run is marked failed even though every
+`@daily` DAG: the extractors run in parallel, then `dbt build` runs once
+they've all finished (staging models read from every raw table, so dbt
+can't start early). `dbt build` seeds, runs and tests in dependency order,
+so a failing test stops the models downstream of it from being built, and
+if data quality regresses the DAG run is marked failed even though every
 individual load succeeded, which is the signal that should actually page
 someone.
 
@@ -59,7 +60,7 @@ stack.
 
 | Table | Grain |
 |---|---|
-| `raw.remoteok_jobs` / `raw.arbeitnow_jobs` / `raw.remotive_jobs` | one row per posting ever seen from that source |
+| `raw.remoteok_jobs` / `raw.remotive_jobs` | one row per posting ever seen from that source |
 | `int_jobs_unioned` | one row per posting, across all sources |
 | `dim_company` | one row per distinct company name |
 | `dim_skill` | one row per tracked skill (from the `skill_keywords` seed) |
@@ -73,8 +74,8 @@ stack.
 
 ## Extending it
 
-* **New source:** add `ingestion/extract_<source>.py` (copy the Arbeitnow
-  one if it paginates, RemoteOK's if it doesn't), a `raw.<source>_jobs`
+* **New source:** add `ingestion/extract_<source>.py` (copy RemoteOK's;
+  `ingestion/runner.py` handles loading and run logging), a `raw.<source>_jobs`
   table in `sql/ddl_raw_tables.sql`, a `stg_<source>_jobs.sql` model, and
   one more `union all` branch in `int_jobs_unioned.sql`. No mart changes.
 * **New skill:** add a row to `dbt/job_market/seeds/skill_keywords.csv`

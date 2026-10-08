@@ -18,15 +18,6 @@ CREATE TABLE IF NOT EXISTS raw.remoteok_jobs (
     last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- One row per job posting seen from the Arbeitnow API.
-CREATE TABLE IF NOT EXISTS raw.arbeitnow_jobs (
-    job_id          TEXT PRIMARY KEY,
-    payload         JSONB NOT NULL,
-    source          TEXT NOT NULL DEFAULT 'arbeitnow',
-    first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 -- One row per job posting seen from the Remotive API. Only postings in the
 -- tech categories we care about are landed here -- Remotive classifies its
 -- own postings, so ingestion filters on that label rather than guessing.
@@ -52,5 +43,4 @@ CREATE TABLE IF NOT EXISTS raw.load_runs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_remoteok_last_seen ON raw.remoteok_jobs (last_seen_at);
-CREATE INDEX IF NOT EXISTS idx_arbeitnow_last_seen ON raw.arbeitnow_jobs (last_seen_at);
 CREATE INDEX IF NOT EXISTS idx_remotive_last_seen ON raw.remotive_jobs (last_seen_at);

@@ -14,19 +14,16 @@ demand and how that changes day to day. It runs daily, orchestrated by
 flowchart LR
     subgraph Sources
         A1[RemoteOK API]
-        A2[Arbeitnow API]
         A3[Remotive API]
     end
 
     subgraph Ingestion["Python ingestion (ingestion/)"]
         E1[extract_remoteok.py]
-        E2[extract_arbeitnow.py]
         E3[extract_remotive.py]
     end
 
     subgraph Warehouse["Postgres"]
         R1[(raw.remoteok_jobs)]
-        R2[(raw.arbeitnow_jobs)]
         R4[(raw.remotive_jobs)]
         R3[(raw.load_runs)]
         M[(analytics_marts.*)]
@@ -41,11 +38,8 @@ flowchart LR
 
     subgraph Orchestration["Airflow (@daily)"]
         D1[extract_remoteok]
-        D2[extract_arbeitnow]
         D6[extract_remotive]
-        D3[dbt seed]
-        D4[dbt run]
-        D5[dbt test]
+        D3[dbt build: seed, run, test]
     end
 
     subgraph Serving
@@ -53,14 +47,11 @@ flowchart LR
     end
 
     A1 --> E1 --> R1
-    A2 --> E2 --> R2
     A3 --> E3 --> R4
-    E1 & E2 & E3 --> R3
-    R1 & R2 & R4 --> T1 --> T2 --> T3 --> T4 --> M
+    E1 & E3 --> R3
+    R1 & R4 --> T1 --> T2 --> T3 --> T4 --> M
     D1 --> D3
-    D2 --> D3
     D6 --> D3
-    D3 --> D4 --> D5
     M --> S1
 ```
 
@@ -92,7 +83,6 @@ Table grains and the star schema are described in
 | Source | Coverage | Relevance filter |
 |---|---|---|
 | [RemoteOK](https://remoteok.com/api) | Remote postings, all industries | Keyword match at ingestion, then role keywords in the title (dbt) |
-| [Arbeitnow](https://www.arbeitnow.com/api/job-board-api) | EU postings, paginated | Same as RemoteOK |
 | [Remotive](https://remotive.com/api/remote-jobs) | Remote-only postings | The source's own job category |
 
 Adzuna was evaluated and not used: its search API truncates descriptions
@@ -197,7 +187,7 @@ refresh.
 
 ```bash
 pytest -v --cov=ingestion                        # unit tests, fixtures from real API responses
-(cd dbt/job_market && dbt build --profiles-dir .) # models + 74 schema/singular tests
+(cd dbt/job_market && dbt build --profiles-dir .) # models + 66 schema/singular tests
 ruff check ingestion tests dashboard             # lint
 ```
 
