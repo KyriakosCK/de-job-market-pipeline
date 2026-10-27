@@ -1,12 +1,7 @@
--- Many-to-many bridge between job postings and the skill taxonomy.
--- A skill is attached to a posting if its match_keyword appears either in
--- the posting's own tags or in its free-text description.
--- Matching is word-boundary based (regex \y, not substring LIKE) because
--- substring matching produced false positives: "api" inside "rapid",
--- "java" inside "javascript", "elt" inside "svelte". Note match_keyword is
--- interpolated into the regex pattern unescaped, so this would break if a
--- keyword ever contained regex metacharacters (e.g. "c++", ".net") -- not
--- an issue for the current seed list, but worth knowing before adding one.
+-- Postings to skills: a skill matches if its keyword appears in the tags or
+-- description. Word boundaries (\y) stop "java" matching "javascript".
+-- Keywords go into the regex unescaped, so none may contain metacharacters
+-- ("c++", ".net").
 with jobs as (
 
     select job_id, tags, description from {{ ref('int_jobs_unioned') }}

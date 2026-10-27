@@ -1,8 +1,5 @@
--- Singular test: lists locations that bridge_job_region couldn't map to
--- any region, so they're counted as 'Unspecified'. Each row is a keyword
--- to consider adding to seeds/region_keywords.csv. A bare "Remote" (or
--- Spanish "Remoto") says nothing about region, so it's expected here and
--- excluded.
+-- Locations no region keyword matched, i.e. candidates for
+-- seeds/region_keywords.csv. A bare "Remote"/"Remoto" is expected and skipped.
 {{ config(severity='warn') }}
 
 select distinct f.location

@@ -1,6 +1,4 @@
--- Lightweight operational/observability mart over the ingestion run log,
--- so pipeline health can be queried with SQL like everything else instead
--- of grepping Airflow logs.
+-- Ingestion run history, for the dashboard's pipeline status.
 select
     run_id,
     source,

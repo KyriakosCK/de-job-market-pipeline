@@ -1,7 +1,4 @@
-"""
-Tests the shared extractor runner with the database layer mocked out, so
-no Postgres is needed.
-"""
+"""Tests for ingestion/runner.py, with the database layer mocked out."""
 from unittest.mock import MagicMock, patch
 
 import pytest

@@ -1,11 +1,6 @@
-"""
-SkillScope dashboard: a thin read-only view over the marts the dbt project
-builds. It never talks to the raw schema or the source APIs directly -- if
-a number looks wrong here, the bug is in a dbt model, not in this file,
-which is exactly the separation of concerns an ELT pipeline should give you.
+"""SkillScope dashboard: a read-only view over the dbt marts.
 
-Run standalone (outside Docker) with:
-    streamlit run dashboard/app.py
+Run with: streamlit run dashboard/app.py
 """
 from __future__ import annotations
 
@@ -20,26 +15,16 @@ from sqlalchemy.engine import URL, Engine
 st.set_page_config(page_title="SkillScope | Data Job Market", page_icon="📊", layout="wide")
 
 MARTS_SCHEMA = "analytics_marts"
-
-# One blue that holds 3:1+ contrast on both Streamlit's light and dark
-# backgrounds.
-BAR_COLOR = "#3987e5"
-# Muted gray for "Unspecified", which isn't a real category.
+BAR_COLOR = "#3987e5"  # holds 3:1+ contrast on Streamlit's light and dark themes
 UNSPECIFIED_COLOR = "#8a8a85"
-
 # Display names for the lowercase category codes in seeds/skill_keywords.csv.
-CATEGORY_LABELS = {
-    "bi": "BI",
-    "ml": "ML",
-    "devops": "DevOps",
-}
+CATEGORY_LABELS = {"bi": "BI", "ml": "ML", "devops": "DevOps"}
+BAR_LAYOUT = {"bargap": 0.25, "margin": {"l": 0, "r": 0, "t": 10, "b": 0}}
 
 
 @st.cache_resource
 def get_engine() -> Engine:
-    # URL.create escapes each part, so a password containing "@" or "/"
-    # can't corrupt the connection string the way an f-string would.
-    url = URL.create(
+    url = URL.create(  # escapes each part, unlike an f-string
         "postgresql+psycopg2",
         username=os.environ.get("WAREHOUSE_USER", "jobmarket"),
         password=os.environ.get("WAREHOUSE_PASSWORD", "jobmarket"),
@@ -51,12 +36,11 @@ def get_engine() -> Engine:
 
 
 def latest_run_status(pipeline_runs: pd.DataFrame) -> tuple[str, str]:
-    """Overall status of the most recent pipeline run, and a per-source breakdown.
+    """Overall status of the latest run, and a per-source breakdown.
 
-    Takes each source's latest run, so one source failing can't be hidden by
-    another succeeding after it. Sources with no run in the day before the
-    newest run are left out, so a source that's no longer scheduled doesn't
-    keep reporting its last failure.
+    Uses each source's latest run, so one source's failure isn't hidden by
+    another's later success. Sources with no run in the day before the
+    newest one are dropped, so a retired source stops reporting.
     """
     latest = pipeline_runs.sort_values("started_at", ascending=False).drop_duplicates("source")
     latest = latest[latest["started_at"] >= latest["started_at"].max() - pd.Timedelta(days=1)]
@@ -67,21 +51,16 @@ def latest_run_status(pipeline_runs: pd.DataFrame) -> tuple[str, str]:
 
 @st.cache_data(ttl=300)
 def load_table(table_name: str) -> pd.DataFrame:
-    engine = get_engine()
-    with engine.connect() as conn:
+    with get_engine().connect() as conn:
         return pd.read_sql(text(f"select * from {MARTS_SCHEMA}.{table_name}"), conn)
 
 
 def marts_exist() -> bool:
-    engine = get_engine()
-    with engine.connect() as conn:
-        result = conn.execute(
-            text(
-                "select 1 from information_schema.schemata where schema_name = :schema"
-            ),
+    with get_engine().connect() as conn:
+        return conn.execute(
+            text("select 1 from information_schema.schemata where schema_name = :schema"),
             {"schema": MARTS_SCHEMA},
-        )
-        return result.first() is not None
+        ).first() is not None
 
 
 st.title("📊 SkillScope — Data & Software Job Market")
@@ -117,11 +96,11 @@ except Exception as exc:  # noqa: BLE001
     )
     st.stop()
 
-active_postings = fact[fact["is_active"]] if "is_active" in fact.columns else fact
+active_postings = fact[fact["is_active"]]
 
 col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Total postings tracked", int(len(fact)))
-col2.metric("Active postings", int(len(active_postings)))
+col1.metric("Total postings tracked", len(fact))
+col2.metric("Active postings", len(active_postings))
 col3.metric("Companies hiring", int(active_postings["company_id"].nunique()))
 col4.metric("Skills tracked", int(skill_demand["skill_id"].nunique()))
 if pipeline_runs.empty:
@@ -143,9 +122,8 @@ with left:
     matched_skills = skill_demand[skill_demand["all_time_postings_count"] > 0].assign(
         category_label=lambda df: df["category"].map(CATEGORY_LABELS).fillna(df["category"].str.title())
     )
-    # The chart ranks skills, so every bar is one color and category is a
-    # filter rather than a hue: sorted by count, any two categories can end
-    # up side by side, and 8+ hues can't stay distinguishable that way.
+    # Bars are ranked by count, so category is a filter rather than a hue:
+    # 8+ hues side by side can't stay distinguishable.
     category = st.selectbox(
         "Category",
         ["All categories", *sorted(matched_skills["category_label"].unique())],
@@ -169,7 +147,7 @@ with left:
             marker_color=BAR_COLOR,
             hovertemplate="<b>%{y}</b><br>%{customdata[0]}<br>%{x} postings<extra></extra>",
         )
-        fig.update_layout(height=500, bargap=0.25, margin={"l": 0, "r": 0, "t": 10, "b": 0})
+        fig.update_layout(height=500, **BAR_LAYOUT)
         st.plotly_chart(fig, use_container_width=True)
 
 with right:
@@ -177,8 +155,7 @@ with right:
     if by_region.empty:
         st.info("No active postings yet -- run the pipeline to populate data.")
     else:
-        # Unspecified isn't a region, so it's pinned to the bottom in gray
-        # instead of competing in the ranking.
+        # Unspecified isn't a region: pinned to the bottom in gray.
         regions = by_region.assign(
             is_unspecified=by_region["region"] == "Unspecified"
         ).sort_values(["is_unspecified", "postings_count"], ascending=[False, True])
@@ -194,7 +171,7 @@ with right:
             marker_color=[UNSPECIFIED_COLOR if u else BAR_COLOR for u in regions["is_unspecified"]],
             hovertemplate="<b>%{y}</b><br>%{x} postings (%{customdata[0]}% of active)<extra></extra>",
         )
-        fig.update_layout(height=420, bargap=0.25, margin={"l": 0, "r": 0, "t": 10, "b": 0})
+        fig.update_layout(height=420, **BAR_LAYOUT)
         st.plotly_chart(fig, use_container_width=True)
         st.caption(
             "Remote roles often hire from several regions, so a posting counts "
@@ -206,13 +183,8 @@ st.divider()
 st.subheader("Active postings")
 active_listings = active_postings.merge(companies, on="company_id", how="left")[
     ["title", "company_name", "location", "posting_url"]
-]
-# location/company_name can be NULL (RemoteOK doesn't always publish them);
-# label them "Unspecified" as the region chart does, rather
-# than let st.dataframe render the literal string "None". posting_url is
-# left blank instead, since a link column showing "Unspecified" would look
-# like a broken link rather than a missing one.
-active_listings = active_listings.fillna(
+].fillna(
+    # A blank link reads as missing; "Unspecified" would look like a broken link.
     {"company_name": "Unspecified", "location": "Unspecified", "posting_url": ""}
 )
 st.dataframe(
@@ -235,15 +207,13 @@ st.subheader("Skill demand trend")
 if daily_trend.empty or daily_trend["snapshot_date"].nunique() < 2:
     st.info(
         "Trend needs at least two days of pipeline runs -- "
-        "`fct_skill_demand_daily` appends one row per skill every time the DAG runs."
+        "`fct_skill_demand_daily` adds one row per skill per day."
     )
 else:
-    # Same ranking as the "Most in-demand skills" chart, so the trend follows
-    # the skills shown at the top there.
+    # Same top skills as the ranking chart above.
     top_skill_names = skill_demand.nlargest(8, "all_time_postings_count")["skill_name"]
-    trend_subset = daily_trend[daily_trend["skill_name"].isin(top_skill_names)]
     fig = px.line(
-        trend_subset.sort_values("snapshot_date"),
+        daily_trend[daily_trend["skill_name"].isin(top_skill_names)].sort_values("snapshot_date"),
         x="snapshot_date",
         y="postings_count",
         color="skill_name",

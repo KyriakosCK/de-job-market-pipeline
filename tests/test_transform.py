@@ -1,9 +1,4 @@
-"""
-Unit tests for the pure transform functions in ingestion/transform.py.
-
-These run with zero network access and zero database -- exactly the kind
-of fast, deterministic test that should run on every commit in CI.
-"""
+"""Unit tests for ingestion/transform.py. No network or database needed."""
 import json
 from pathlib import Path
 

@@ -1,15 +1,10 @@
--- Raw landing zone DDL for the SkillScope job-market pipeline.
--- This runs once (via ingestion/db.py :: ensure_schema, or manually) before
--- the first ingestion run. dbt only ever reads from the `raw` schema, it
--- never writes to it -- that boundary is what keeps EL (ingestion) and T
--- (dbt) cleanly separated.
+-- Raw landing zone. Ingestion runs this before every load (db.ensure_schema);
+-- dbt only reads from `raw`, never writes to it.
 
 CREATE SCHEMA IF NOT EXISTS raw;
 
--- One row per job posting seen from the RemoteOK API.
--- We keep the full payload as JSONB ("land it raw, model it later") so that
--- schema drift on the source side never breaks ingestion -- only dbt models
--- need updating when a new field needs to be surfaced.
+-- Full API payloads as JSONB, one row per posting ever seen, so source
+-- schema changes break a dbt model rather than ingestion.
 CREATE TABLE IF NOT EXISTS raw.remoteok_jobs (
     job_id          TEXT PRIMARY KEY,
     payload         JSONB NOT NULL,
@@ -18,9 +13,6 @@ CREATE TABLE IF NOT EXISTS raw.remoteok_jobs (
     last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- One row per job posting seen from the Remotive API. Only postings in the
--- tech categories we care about are landed here -- Remotive classifies its
--- own postings, so ingestion filters on that label rather than guessing.
 CREATE TABLE IF NOT EXISTS raw.remotive_jobs (
     job_id          TEXT PRIMARY KEY,
     payload         JSONB NOT NULL,
@@ -29,8 +21,7 @@ CREATE TABLE IF NOT EXISTS raw.remotive_jobs (
     last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Lightweight run log so the Airflow DAG (and anyone reading the warehouse)
--- can see ingestion history without digging through Airflow's own logs.
+-- One row per extractor run, success or failure.
 CREATE TABLE IF NOT EXISTS raw.load_runs (
     run_id          BIGSERIAL PRIMARY KEY,
     source          TEXT NOT NULL,

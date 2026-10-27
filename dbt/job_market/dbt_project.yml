@@ -1,27 +1,12 @@
 name: 'job_market'
 version: '1.0.0'
 config-version: 2
-
 profile: 'job_market'
 
-model-paths: ["models"]
-seed-paths: ["seeds"]
-test-paths: ["tests"]
-macro-paths: ["macros"]
-snapshot-paths: ["snapshots"]
-
-target-path: "target"
-clean-targets:
-  - "target"
-  - "dbt_packages"
-
 vars:
-  # Only postings still seen in the last N days count as "active" for the
-  # skill-demand marts. The source APIs only return their ~100 most recent
-  # postings each run, so a job that's still live but has scrolled out of
-  # that window looks "gone" well before it's actually closed. 14 days
-  # gives postings room to keep reappearing across runs without being
-  # marked inactive prematurely.
+  # A posting counts as active if it was seen in the last N days. The APIs
+  # return only their most recent ~100 postings, so a live job can drop out
+  # of a run's results well before it closes.
   active_posting_window_days: 14
 
 models:

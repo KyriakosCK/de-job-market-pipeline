@@ -1,11 +1,6 @@
--- Singular test: flags postings whose short text fields still contain
--- mojibake after ingestion's repair step (see macros/mojibake.sql).
---
--- Severity is warn, not error: int_jobs_unioned already nulls garbled
--- locations and company names, so nothing broken reaches the dashboard.
--- This test exists so that fallback firing is visible in `dbt test` output
--- instead of silently eating data. A sudden jump in its row count means a
--- source changed its encoding.
+-- Postings whose text still has mojibake after ingestion's repair. Warn
+-- only: int_jobs_unioned nulls them, and this makes that visible. A jump
+-- in the count means a source changed its encoding.
 {{ config(severity='warn') }}
 
 {% for model in ['stg_remoteok_jobs', 'stg_remotive_jobs'] %}

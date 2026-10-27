@@ -1,5 +1,4 @@
--- Singular test: whenever both salary bounds are present, max should never
--- be less than min. Returning any row here fails the test.
+-- salary_max must not be below salary_min.
 select job_id, salary_min, salary_max
 from {{ ref('fact_job_postings') }}
 where salary_min is not null

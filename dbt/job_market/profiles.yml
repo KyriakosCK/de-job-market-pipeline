@@ -1,7 +1,5 @@
-# Committed on purpose: every value comes from an environment variable, so
-# there are no secrets in this file. The Airflow container points
-# DBT_PROFILES_DIR at this directory; for local dbt CLI usage, either copy
-# this to ~/.dbt/profiles.yml or set DBT_PROFILES_DIR=dbt/job_market.
+# No secrets here: every value comes from an environment variable.
+# Use with `dbt ... --profiles-dir .` or DBT_PROFILES_DIR=dbt/job_market.
 job_market:
   target: dev
   outputs:

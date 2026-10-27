@@ -1,11 +1,4 @@
-"""
-Pure functions for shaping raw API payloads before they hit Postgres.
-
-Kept separate from db.py / the extract_*.py entrypoints on purpose: pure
-functions with no I/O are trivial to unit test (see tests/test_transform.py),
-which is exactly the part of an ingestion job that's worth covering --
-the parts that silently produce wrong data instead of loudly failing.
-"""
+"""Pure functions that shape raw API payloads before they're landed (no I/O)."""
 from __future__ import annotations
 
 import html
@@ -14,14 +7,13 @@ from typing import Any
 
 from ingestion.config import RELEVANT_KEYWORDS, REMOTIVE_TECH_CATEGORIES
 
-# A run of characters from the Latin-1 range (U+0080-U+00FF). Text that was
-# UTF-8 encoded and then wrongly decoded as Latin-1 ("mojibake") turns every
-# non-ASCII character into exactly such a run: "دبي" arrives as "Ø¯Ø¨Ù\x8a",
-# "Macaé" as "MacaÃ©".
+# UTF-8 text wrongly decoded as Latin-1 ("mojibake") turns each non-ASCII
+# character into a run of U+0080-U+00FF characters: "دبي" arrives as
+# "Ø¯Ø¨Ù\x8a", "Macaé" as "MacaÃ©".
 _LATIN1_RUN_RE = re.compile(r"[\u0080-ÿ]+")
 
-# Short, human-facing RemoteOK fields that arrive HTML-escaped
-# ("Localiza&amp;Co"). The description is real HTML and is left alone.
+# RemoteOK fields that arrive HTML-escaped ("Localiza&amp;Co"). The
+# description is real HTML and is left alone.
 _REMOTEOK_PLAIN_TEXT_FIELDS = ("position", "company", "location")
 
 
@@ -30,21 +22,16 @@ def _decode_run(match: re.Match[str]) -> str:
     try:
         return run.encode("latin-1").decode("utf-8")
     except UnicodeDecodeError:
-        # Not valid UTF-8 once re-encoded, so it was never mojibake: a
-        # genuine "é" or "ü" on its own. Leave it exactly as it was.
-        return run
+        return run  # a genuine "é" or "ü", not mojibake
 
 
 def repair_mojibake(text: str) -> str:
     """Undo UTF-8-read-as-Latin-1 corruption, leaving clean text untouched.
 
-    RemoteOK's API double-encodes non-ASCII text at the source (verified
-    against the raw response bytes, so it isn't a client-side decoding bug
-    we could fix in http_utils). Each Latin-1 run is repaired on its own,
-    which means a string mixing clean and corrupted text is still fixed,
-    and a run that doesn't decode as UTF-8 is kept verbatim. The loop covers
-    text that was double-encoded more than once; repairing clean text is a
-    no-op, so the function is idempotent.
+    RemoteOK double-encodes non-ASCII text at the source. Each Latin-1 run
+    is repaired on its own, so mixed clean/corrupted strings are fixed and
+    runs that aren't valid UTF-8 are kept. The loop handles text encoded
+    more than once; on clean text this is a no-op.
     """
     for _ in range(3):
         repaired = _LATIN1_RUN_RE.sub(_decode_run, text)
@@ -66,14 +53,11 @@ def repair_payload_text(value: Any) -> Any:
 
 
 def clean_remoteok_job(raw_job: dict) -> dict:
-    """Fix RemoteOK's known upstream text defects before the job is landed.
+    """Fix RemoteOK's text defects before landing.
 
-    This is the one place ingestion changes a payload's content rather than
-    landing it verbatim. That's deliberate: the corruption is a defect in
-    the source, no downstream consumer wants it, and it can't be reversed
-    in SQL without risking a failed dbt run on the odd string that isn't
-    valid UTF-8. Doing it here keeps the fix in a pure, unit-tested
-    function.
+    The only place ingestion changes payload content: the corruption is a
+    source defect, and undoing it in SQL would fail on any string that
+    isn't valid UTF-8.
     """
     job = repair_payload_text(raw_job)
     for field in _REMOTEOK_PLAIN_TEXT_FIELDS:
@@ -83,13 +67,7 @@ def clean_remoteok_job(raw_job: dict) -> dict:
 
 
 def is_relevant(title: str, description: str, tags: list[str]) -> bool:
-    """Keep only postings that plausibly belong to data/software roles.
-
-    RemoteOK returns postings from every job category (a sandblaster role
-    shows up in its feed right next to a data engineer role) and has no
-    usable category label, so we filter on keywords across title + tags +
-    description.
-    """
+    """Keyword filter for RemoteOK, which mixes every industry and has no category."""
     haystack = " ".join([title or "", " ".join(tags or []), description or ""]).lower()
     return any(keyword in haystack for keyword in RELEVANT_KEYWORDS)
 
@@ -109,27 +87,18 @@ def remotive_job_id(raw_job: dict) -> str:
 
 
 def filter_remoteok_jobs(raw_jobs: list[dict]) -> list[dict]:
-    """RemoteOK's feed starts with a non-job 'legal notice' record and mixes
-    in postings from unrelated industries -- filter both out.
-    """
-    relevant = []
-    for job in raw_jobs:
-        if "id" not in job and "slug" not in job:
-            continue  # the legal-notice / metadata record
-        if is_relevant(
-            job.get("position", ""), job.get("description", ""), job.get("tags", [])
-        ):
-            relevant.append(job)
-    return relevant
+    """Drop RemoteOK's leading legal-notice record and irrelevant postings."""
+    return [
+        job for job in raw_jobs
+        if ("id" in job or "slug" in job)
+        and is_relevant(job.get("position", ""), job.get("description", ""), job.get("tags", []))
+    ]
 
 
 def filter_remotive_jobs(raw_jobs: list[dict]) -> list[dict]:
-    """Filter Remotive postings on the source's own category label.
+    """Keep Remotive postings by the source's own category label.
 
-    Deliberately *not* using is_relevant() here. Remotive classifies every
-    posting itself ("Software Development", "Marketing", "Writing", ...), and
-    trusting that structured label beats guessing from free text -- which is
-    what let a Fire Fighter and an Accounts Receivable Clerk through the
-    RemoteOK filter, on the strength of one "data" in their GDPR boilerplate.
+    Not is_relevant(): keyword matching free text let a Fire Fighter through
+    on one "data" in its GDPR boilerplate.
     """
     return [job for job in raw_jobs if job.get("category") in REMOTIVE_TECH_CATEGORIES]

@@ -1,18 +1,8 @@
--- Many-to-many bridge between job postings and broad hiring regions.
---
--- A posting's location can be one place ("Redwood City") or a list of
--- regions a remote role hires from ("LATAM, Europe, USA, Canada, APAC").
--- Counting raw strings splits one region across many rows, so each posting
--- is mapped to every region whose keyword appears in its location (seed:
--- region_keywords). A posting open to three regions gets three rows.
---
--- Postings with no location, or one no keyword matches ("Remote"), get a
--- single 'Unspecified' row, so every posting appears here at least once.
--- tests/assert_locations_have_region.sql lists locations that fell through
--- so the seed can be extended.
---
--- Word-boundary matching (\y), as in bridge_job_skill, keeps "us" from
--- matching inside "Russia" or "Belarus".
+-- Postings to hiring regions. A location can be one place or a list of
+-- regions a remote role hires from ("LATAM, Europe, USA"), so each posting
+-- gets a row per region whose keyword (seed: region_keywords) appears in
+-- it, or one 'Unspecified' row if none does. Word boundaries (\y) keep "us"
+-- from matching inside "Russia".
 with jobs as (
 
     select job_id, location from {{ ref('fact_job_postings') }}

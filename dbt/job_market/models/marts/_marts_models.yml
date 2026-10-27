@@ -117,7 +117,7 @@ models:
         description: Share of active postings open to candidates in this region.
 
   - name: fct_skill_demand_daily
-    description: Incremental daily snapshot of mart_skill_demand, one partition per Airflow run. Powers trend-over-time charts.
+    description: Incremental daily snapshot of mart_skill_demand, one row per (day, skill). Powers the trend chart.
     columns:
       - name: snapshot_date
         tests:
