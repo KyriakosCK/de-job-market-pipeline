@@ -1,93 +1,77 @@
-# SkillScope — Data & Software Job Market Pipeline
+# SkillScope: Data & Software Job Market Pipeline
 
 [![CI](https://github.com/KyriakosCK/de-job-market-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/KyriakosCK/de-job-market-pipeline/actions/workflows/ci.yml)
 
-An ELT pipeline that collects tech job postings from public job board APIs,
-lands them as raw JSON in Postgres, models them into a star schema with
-**dbt**, and serves a **Streamlit** dashboard showing which skills are in
-demand and how that changes day to day. It runs daily, orchestrated by
-**Airflow** in Docker Compose or by a scheduled script.
+A daily ELT pipeline that tracks which skills remote data and software jobs
+ask for. It pulls postings from two public job board APIs, lands them as raw
+JSON in Postgres, models them into a star schema with **dbt**, and serves the
+results in a **Streamlit** dashboard. **Airflow** (Docker Compose) or a
+scheduled script runs it once a day.
 
-## Architecture
+![Dashboard overview: headline metrics, most in-demand skills, and hiring regions](docs/images/dashboard-overview.png)
+
+Because a snapshot is stored every day, the dashboard also shows how demand
+for each skill changes over time:
+
+![Skill demand trend over two months of daily runs](docs/images/skill-trend.png)
+
+## How it works
 
 ```mermaid
 flowchart LR
-    subgraph Sources
-        A1[RemoteOK API]
-        A3[Remotive API]
-    end
-
-    subgraph Ingestion["Python ingestion (ingestion/)"]
-        E1[extract_remoteok.py]
-        E3[extract_remotive.py]
-    end
-
-    subgraph Warehouse["Postgres"]
-        R1[(raw.remoteok_jobs)]
-        R4[(raw.remotive_jobs)]
-        R3[(raw.load_runs)]
-        M[(analytics_marts.*)]
-    end
-
-    subgraph Transform["dbt (dbt/job_market)"]
-        T1[staging]
-        T2[intermediate]
-        T3[marts: dim / fact / bridge]
-        T4[incremental daily snapshot]
-    end
-
-    subgraph Orchestration["Airflow (@daily)"]
-        D1[extract_remoteok]
-        D6[extract_remotive]
-        D3[dbt build: seed, run, test]
-    end
-
-    subgraph Serving
-        S1[Streamlit dashboard]
-    end
-
-    A1 --> E1 --> R1
-    A3 --> E3 --> R4
-    E1 & E3 --> R3
-    R1 & R4 --> T1 --> T2 --> T3 --> T4 --> M
-    D1 --> D3
-    D6 --> D3
-    M --> S1
+    API["RemoteOK + Remotive APIs"] --> ING["Python extractors<br/>ingestion/"]
+    ING --> RAW[("Postgres<br/>raw JSONB")]
+    RAW --> DBT["dbt<br/>staging → intermediate → marts"]
+    DBT --> MARTS[("Postgres<br/>analytics_marts")]
+    MARTS --> DASH["Streamlit<br/>dashboard"]
+    ORCH["Airflow DAG or<br/>run_pipeline.bat (daily)"] -.-> ING
+    ORCH -.-> DBT
 ```
 
-1. **Extract & load.** One Python extractor per source fetches postings,
-   drops irrelevant ones, and upserts each payload as JSONB into its own
-   `raw.*` table. Every run is logged to `raw.load_runs`.
-2. **Transform.** dbt flattens each source in staging, unions them onto a
-   common shape, tags skills against a seed taxonomy, and builds the marts.
+1. **Extract and load.** Each source has its own Python extractor. It fetches
+   postings, drops the ones that aren't data or software roles, and upserts
+   each payload as JSONB into a `raw.*` table. Every run, successful or
+   not, is logged to `raw.load_runs`.
+2. **Transform.** dbt flattens each source, combines them into one shape,
+   tags skills against a keyword list, maps locations to hiring regions,
+   and builds the marts. Tests run between layers, so bad data stops before
+   it reaches the dashboard.
 3. **Serve.** The dashboard reads only from `analytics_marts`.
 
-## Tech stack
-
-| Layer | Tool |
+| Layer | Tools |
 |---|---|
 | Ingestion | Python 3.11, `requests`, `psycopg2` |
-| Storage | PostgreSQL (raw JSONB landing zone + analytics schemas) |
-| Transformation | dbt (dbt-postgres): staging, intermediate, marts, seeds, incremental model |
-| Orchestration | Apache Airflow 2.10 (LocalExecutor), or `run_pipeline.bat` via Windows Task Scheduler |
-| Serving | Streamlit + Plotly |
-| Packaging | Docker Compose |
-| Testing | pytest, dbt schema and singular tests |
-| CI | GitHub Actions |
+| Storage | PostgreSQL |
+| Transformation | dbt (staging, intermediate, marts, seeds, incremental model, tests) |
+| Orchestration | Airflow 2.10, or `run_pipeline.bat` with Windows Task Scheduler |
+| Dashboard | Streamlit, Plotly |
+| Testing and CI | pytest, dbt tests, ruff, GitHub Actions |
 
 ## Data sources
 
-| Source | Coverage | Relevance filter |
+| Source | What it covers | How irrelevant postings are filtered out |
 |---|---|---|
-| [RemoteOK](https://remoteok.com/api) | Remote postings, all industries | Keyword match at ingestion, then role keywords in the title (dbt) |
-| [Remotive](https://remotive.com/api/remote-jobs) | Remote-only postings | The source's own job category |
+| [RemoteOK](https://remoteok.com/api) | Remote jobs in every industry | Keywords at ingestion, then role keywords in the title |
+| [Remotive](https://remotive.com/api/remote-jobs) | Remote jobs only | The category Remotive assigns each posting |
 
-Adzuna was evaluated and not used: its search API truncates descriptions
-at 500 characters (which would undercount skills), its salaries are model
-predictions rather than posted figures, and its results were mostly UK
-on-site roles.
+Adzuna was considered and left out: its API cuts descriptions off at 500
+characters (too short to find skills), its salaries are estimates rather
+than posted figures, and most results were UK office roles.
 
 ## Data model
+
+| Table | One row per |
+|---|---|
+| `fact_job_postings` | posting, across all sources (with `is_active`) |
+| `dim_company` / `dim_skill` | company / tracked skill |
+| `bridge_job_skill` | (posting, skill) match |
+| `bridge_job_region` | (posting, hiring region) |
+| `mart_skill_demand` / `mart_postings_by_region` | skill / region, current counts |
+| `fct_skill_demand_daily` | (day, skill): the history behind the trend chart |
+| `mart_pipeline_runs` | ingestion run |
+
+<details>
+<summary>Entity-relationship diagram</summary>
 
 ```mermaid
 erDiagram
@@ -112,9 +96,6 @@ erDiagram
         text source
         text title
         text location
-        boolean is_remote
-        numeric salary_min
-        numeric salary_max
         boolean is_active
     }
     bridge_job_skill {
@@ -129,122 +110,89 @@ erDiagram
         date snapshot_date
         text skill_id FK
         int postings_count
-        numeric pct_of_active_postings
     }
 ```
 
-| Table | Grain |
-|---|---|
-| `raw.remoteok_jobs` / `raw.remotive_jobs` | one row per posting ever seen from that source |
-| `fact_job_postings` | one row per posting, all sources |
-| `dim_company` / `dim_skill` | one row per company name / tracked skill |
-| `bridge_job_skill` / `bridge_job_region` | one row per (posting, skill) / (posting, hiring region) |
-| `mart_skill_demand` / `mart_postings_by_region` | one row per skill / region, current counts |
-| `fct_skill_demand_daily` | one row per (day, skill); the only table with history |
-| `mart_pipeline_runs` | one row per ingestion run |
+</details>
 
-Column-level docs and lineage are generated by dbt:
-
-```bash
-cd dbt/job_market
-dbt docs generate && dbt docs serve
-```
+Column docs and the lineage graph come from dbt:
+`cd dbt/job_market && dbt docs generate && dbt docs serve`.
 
 ## Running it
 
-### Docker Compose (full stack)
-
-```bash
-git clone https://github.com/KyriakosCK/de-job-market-pipeline.git
-cd de-job-market-pipeline
-cp .env.example .env
-docker compose up --build
-```
-
-* Airflow: http://localhost:8080 (`admin` / `admin`). Trigger the
-  `job_market_pipeline` DAG, or wait for the daily schedule.
-* Dashboard: http://localhost:8501, populated after the first DAG run.
-* Warehouse Postgres: `localhost:5433`.
-
-### Local, without Docker
+**Locally (any Postgres):**
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt dbt-postgres
 
-# any Postgres works; see .env.example for the variables
+# connection settings; see .env.example
 export WAREHOUSE_HOST=localhost WAREHOUSE_PORT=5432 \
        WAREHOUSE_DB=warehouse WAREHOUSE_USER=jobmarket WAREHOUSE_PASSWORD=jobmarket
 
 python -m ingestion.extract_remoteok
 python -m ingestion.extract_remotive
 (cd dbt/job_market && dbt build --profiles-dir .)
-
 streamlit run dashboard/app.py
 ```
 
-### Scheduled on Windows
+**With Docker Compose (Postgres, Airflow, and the dashboard):**
 
-`run_pipeline.bat` runs the RemoteOK and Remotive extractors and
-`dbt build`, logs to `logs/pipeline_YYYY-MM-DD.log`, and exits non-zero if
-any step fails. Point a Windows Task Scheduler task at it for a daily
-refresh.
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+Airflow runs at http://localhost:8080 (`admin` / `admin`); trigger the
+`job_market_pipeline` DAG there. The dashboard runs at http://localhost:8501.
+
+**Daily on Windows:** point a Task Scheduler task at `run_pipeline.bat`.
+It runs both extractors and `dbt build`, writes `logs/pipeline_YYYY-MM-DD.log`,
+and exits non-zero if any step fails.
 
 ## Testing
 
 ```bash
-pytest -v --cov=ingestion                        # unit tests, fixtures from real API responses
-(cd dbt/job_market && dbt build --profiles-dir .) # models + 66 schema/singular tests
-ruff check ingestion tests dashboard             # lint
+pytest -v --cov=ingestion                          # unit tests on fixtures from real API responses
+(cd dbt/job_market && dbt build --profiles-dir .)  # models + 66 dbt tests
+ruff check ingestion tests dashboard               # lint
 ```
 
-CI runs all three on every push: lint and unit tests, a full `dbt build`
-against a Postgres service container loaded with fixture data, and a check
-that the Airflow DAG imports cleanly.
+CI runs all of these on every push: lint and unit tests, a full `dbt build`
+against a throwaway Postgres loaded with fixture data, and a check that the
+Airflow DAG imports cleanly.
 
-## Design notes
+## Design decisions
 
-* **Raw JSONB landing.** Ingestion stores whole payloads rather than
-  mapping them to typed columns (the one content change is the encoding
-  repair below), so a change in a source's schema breaks a dbt model with
-  a clear error instead of breaking ingestion.
-* **One extractor per source, shared load path.** Adding a source takes an
-  `extract_*.py`, a `stg_*.sql` model, and a `union all` branch in
-  `int_jobs_unioned`.
-* **Soft-expiring postings.** Postings are never deleted.
-  `fact_job_postings.is_active` is derived from `last_seen_at` (14-day
-  window, configurable in `dbt_project.yml`), so historical trend data
-  stays intact.
-* **Incremental model for the daily trend.** `fct_skill_demand_daily` is an
-  incremental model keyed on `(snapshot_date, skill_id)`. dbt snapshots
-  track row changes in source tables (SCD2), which isn't what a daily
-  aggregate needs.
-* **Handling a source encoding defect.** RemoteOK's API double-encodes
-  non-ASCII text (`Macaé` arrives as `MacaÃ©`). `transform.repair_mojibake`
-  repairs it before loading, and dbt maps anything still unrepairable to
-  NULL. Locations sent
-  only in non-Latin scripts are translated through the
-  `location_translations` seed. Two warn-level dbt tests report when either
+- **Raw JSON first.** Ingestion stores whole payloads instead of mapping
+  them to columns. If a source changes its format, a dbt model fails with a
+  clear error and ingestion keeps working.
+- **Adding a source is three files:** an `extract_*.py`, a `stg_*.sql`
+  model, and one `union all` line in `int_jobs_unioned`. Loading and run
+  logging are shared in `ingestion/runner.py`.
+- **Postings are never deleted.** A posting is active if it was seen in the
+  last 14 days (configurable in `dbt_project.yml`), so history stays intact.
+- **Daily history as an incremental model.** `fct_skill_demand_daily` adds
+  one row per skill per day, and a rerun on the same day replaces that
+  day's rows.
+- **Fixing a broken source encoding.** RemoteOK's API garbles non-English
+  text (`Macaé` arrives as `MacaÃ©`). Ingestion repairs it, dbt blanks out
+  anything still unreadable, and locations sent only in non-Latin scripts
+  are translated through a seed. Warning-level tests report when either
   fallback is used.
-* **Locations mapped to hiring regions.** A remote posting's location is
-  often a list of regions it hires from ("LATAM, Europe, USA"), not an
-  office. `bridge_job_region` maps each posting to every region whose
-  keyword appears in its location (`region_keywords` seed), so a posting
-  counts once in each region it's open to.
-* **Separate Postgres instances** for Airflow metadata and the warehouse,
-  so orchestration state and analytics data don't share a database.
+- **Locations become hiring regions.** A remote job's location is often a
+  list such as "LATAM, Europe, USA". Each posting is mapped to every region
+  it mentions, so it counts once in each.
 
-## Limitations and next steps
+## Limitations
 
-* Skill tagging is keyword-based, so it can miss synonyms or match
-  unrelated uses of a word. A classifier would be more accurate at higher
-  volumes.
-* The source APIs return only their most recent postings, so coverage
-  depends on running daily.
-* At larger scale: a managed warehouse (Snowflake, BigQuery), a
-  Celery or Kubernetes executor for Airflow, and an SCD2 `dim_company` if
-  company attributes are added.
+- Skill tagging matches keywords, so it can miss synonyms or match an
+  unrelated use of a word.
+- The APIs return only their most recent postings, so coverage depends on
+  running every day.
+- Many RemoteOK postings give no location, so "Unspecified" is the largest
+  region.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
